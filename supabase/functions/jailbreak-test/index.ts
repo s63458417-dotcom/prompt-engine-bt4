@@ -97,26 +97,49 @@ serve(async (req) => {
         { role: "user", parts: [{ text: userMessage }] },
       ];
 
-      response = await fetch(
-        `${apiEndpoint}/models/${model}:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: jailbreakPrompt }] },
-            contents,
-            generationConfig: {
-              maxOutputTokens: 4096,
-              temperature: 0.7,
-            },
-          }),
-        }
-      );
+      // Check if apiEndpoint already contains the model (e.g., full URL from frontend)
+      let googleUrl: string;
+      if (apiEndpoint.includes(":generateContent")) {
+        // Full URL provided, just append API key
+        googleUrl = `${apiEndpoint}?key=${apiKey}`;
+      } else if (apiEndpoint.includes("/models/")) {
+        // Endpoint includes /models/ but not :generateContent
+        googleUrl = `${apiEndpoint}:generateContent?key=${apiKey}`;
+      } else {
+        // Base endpoint provided, construct full URL
+        googleUrl = `${apiEndpoint}/models/${model}:generateContent?key=${apiKey}`;
+      }
 
-      responseData = await response.json();
-      console.log("Google response status:", response.status);
+      console.log("Google API URL:", googleUrl);
+
+      response = await fetch(googleUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: jailbreakPrompt }] },
+          contents,
+          generationConfig: {
+            maxOutputTokens: 4096,
+            temperature: 0.7,
+          },
+        }),
+      });
+
+      const responseText = await response.text();
+      console.log("Google response status:", response.status, "Body length:", responseText.length);
+
+      if (!responseText) {
+        throw new Error("Empty response from Google API");
+      }
+
+      try {
+        responseData = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error("Failed to parse Google response:", responseText.substring(0, 500));
+        throw new Error(`Invalid JSON response from Google API: ${responseText.substring(0, 100)}`);
+      }
 
       if (!response.ok) {
         throw new Error(responseData.error?.message || `Google API error: ${response.status}`);
