@@ -256,9 +256,18 @@ export function ConfigSidebar({
                 className="h-8 w-8"
                 title="Admin Panel"
               >
-                <Settings className="w-4 h-4" />
+                <Shield className="w-4 h-4" />
               </Button>
             )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => navigate("/settings")}
+              className="h-8 w-8"
+              title="Account Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </Button>
             <Button
               variant="ghost"
               size="icon"
