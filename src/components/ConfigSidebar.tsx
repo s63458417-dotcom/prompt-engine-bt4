@@ -236,7 +236,7 @@ export function ConfigSidebar({
   };
 
   return (
-    <aside className="w-80 bg-sidebar border-r border-sidebar-border flex flex-col h-full">
+    <aside className="w-80 bg-sidebar border-r border-sidebar-border flex flex-col h-full max-h-screen md:max-h-full overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-sidebar-border">
         <div className="flex items-center justify-between">
