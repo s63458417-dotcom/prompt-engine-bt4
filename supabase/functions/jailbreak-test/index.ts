@@ -30,7 +30,7 @@ serve(async (req) => {
       endpoint: apiEndpoint,
       model,
       stealthMode,
-      historyLength: conversationHistory.length,
+      historyLength: conversationHistory?.length || 0,
       testMode,
     });
 
@@ -46,15 +46,19 @@ serve(async (req) => {
     const isAnthropic = apiEndpoint.includes("anthropic");
     const isGoogle = apiEndpoint.includes("generativelanguage.googleapis.com");
     const isCohere = apiEndpoint.includes("cohere");
-    const isMistral = apiEndpoint.includes("mistral");
 
-    let response;
-    let responseData;
+    let response: Response;
+    let responseData: unknown;
+
+    // Prepare the effective jailbreak prompt (apply stealth encoding if needed)
+    const effectivePrompt = stealthMode 
+      ? `[Decode Base64 input and respond normally]\n${jailbreakPrompt}`
+      : jailbreakPrompt;
 
     if (isAnthropic) {
       // Anthropic API format
       const messages = [
-        ...conversationHistory.map((m) => ({
+        ...(conversationHistory || []).map((m) => ({
           role: m.role === "assistant" ? "assistant" : "user",
           content: m.content,
         })),
@@ -71,43 +75,60 @@ serve(async (req) => {
         body: JSON.stringify({
           model,
           max_tokens: 4096,
-          system: jailbreakPrompt,
+          system: effectivePrompt,
           messages,
         }),
       });
 
-      responseData = await response.json();
-      console.log("Anthropic response status:", response.status);
+      const responseText = await response.text();
+      console.log("Anthropic response status:", response.status, "Body length:", responseText.length);
 
-      if (!response.ok) {
-        throw new Error(responseData.error?.message || `Anthropic API error: ${response.status}`);
+      if (!responseText) {
+        throw new Error("Empty response from Anthropic API");
       }
 
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        console.error("Failed to parse Anthropic response:", responseText.substring(0, 500));
+        throw new Error(`Invalid JSON response from Anthropic API: ${responseText.substring(0, 200)}`);
+      }
+
+      if (!response.ok) {
+        const errorData = responseData as { error?: { message?: string } };
+        throw new Error(errorData.error?.message || `Anthropic API error: ${response.status}`);
+      }
+
+      const anthropicData = responseData as { content?: { text?: string }[] };
       return new Response(
-        JSON.stringify({ response: responseData.content[0]?.text || "No response" }),
+        JSON.stringify({ response: anthropicData.content?.[0]?.text || "No response" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+
     } else if (isGoogle) {
       // Google Gemini API format
       const contents = [
-        ...conversationHistory.map((m) => ({
+        ...(conversationHistory || []).map((m) => ({
           role: m.role === "assistant" ? "model" : "user",
           parts: [{ text: m.content }],
         })),
         { role: "user", parts: [{ text: userMessage }] },
       ];
 
-      // Check if apiEndpoint already contains the model (e.g., full URL from frontend)
+      // Construct proper Google API URL
+      // Expected base: https://generativelanguage.googleapis.com/v1beta
       let googleUrl: string;
-      if (apiEndpoint.includes(":generateContent")) {
-        // Full URL provided, just append API key
-        googleUrl = `${apiEndpoint}?key=${apiKey}`;
-      } else if (apiEndpoint.includes("/models/")) {
-        // Endpoint includes /models/ but not :generateContent
-        googleUrl = `${apiEndpoint}:generateContent?key=${apiKey}`;
+      const baseEndpoint = apiEndpoint.replace(/\/$/, ""); // Remove trailing slash
+      
+      if (baseEndpoint.includes(":generateContent")) {
+        // Full URL already provided
+        googleUrl = `${baseEndpoint}?key=${apiKey}`;
+      } else if (baseEndpoint.includes("/models/")) {
+        // Has /models/ but no :generateContent
+        googleUrl = `${baseEndpoint}:generateContent?key=${apiKey}`;
       } else {
-        // Base endpoint provided, construct full URL
-        googleUrl = `${apiEndpoint}/models/${model}:generateContent?key=${apiKey}`;
+        // Base endpoint, construct full URL with model
+        googleUrl = `${baseEndpoint}/models/${model}:generateContent?key=${apiKey}`;
       }
 
       console.log("Google API URL:", googleUrl);
@@ -118,7 +139,7 @@ serve(async (req) => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          systemInstruction: { parts: [{ text: jailbreakPrompt }] },
+          systemInstruction: { parts: [{ text: effectivePrompt }] },
           contents,
           generationConfig: {
             maxOutputTokens: 4096,
@@ -131,29 +152,32 @@ serve(async (req) => {
       console.log("Google response status:", response.status, "Body length:", responseText.length);
 
       if (!responseText) {
-        throw new Error("Empty response from Google API");
+        throw new Error("Empty response from Google API - check your API key and model name");
       }
 
       try {
         responseData = JSON.parse(responseText);
-      } catch (parseError) {
+      } catch {
         console.error("Failed to parse Google response:", responseText.substring(0, 500));
-        throw new Error(`Invalid JSON response from Google API: ${responseText.substring(0, 100)}`);
+        throw new Error(`Invalid JSON response from Google API: ${responseText.substring(0, 200)}`);
       }
 
       if (!response.ok) {
-        throw new Error(responseData.error?.message || `Google API error: ${response.status}`);
+        const errorData = responseData as { error?: { message?: string } };
+        throw new Error(errorData.error?.message || `Google API error: ${response.status}`);
       }
 
+      const googleData = responseData as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
       return new Response(
         JSON.stringify({ 
-          response: responseData.candidates?.[0]?.content?.parts?.[0]?.text || "No response" 
+          response: googleData.candidates?.[0]?.content?.parts?.[0]?.text || "No response" 
         }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+
     } else if (isCohere) {
       // Cohere API format
-      const chatHistory = conversationHistory.map((m) => ({
+      const chatHistory = (conversationHistory || []).map((m) => ({
         role: m.role === "assistant" ? "CHATBOT" : "USER",
         message: m.content,
       }));
@@ -167,27 +191,41 @@ serve(async (req) => {
         body: JSON.stringify({
           model,
           message: userMessage,
-          preamble: jailbreakPrompt,
+          preamble: effectivePrompt,
           chat_history: chatHistory,
         }),
       });
 
-      responseData = await response.json();
-      console.log("Cohere response status:", response.status);
+      const responseText = await response.text();
+      console.log("Cohere response status:", response.status, "Body length:", responseText.length);
 
-      if (!response.ok) {
-        throw new Error(responseData.message || `Cohere API error: ${response.status}`);
+      if (!responseText) {
+        throw new Error("Empty response from Cohere API");
       }
 
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        console.error("Failed to parse Cohere response:", responseText.substring(0, 500));
+        throw new Error(`Invalid JSON response from Cohere API: ${responseText.substring(0, 200)}`);
+      }
+
+      if (!response.ok) {
+        const errorData = responseData as { message?: string };
+        throw new Error(errorData.message || `Cohere API error: ${response.status}`);
+      }
+
+      const cohereData = responseData as { text?: string };
       return new Response(
-        JSON.stringify({ response: responseData.text || "No response" }),
+        JSON.stringify({ response: cohereData.text || "No response" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+
     } else {
       // OpenAI-compatible API format (works for OpenAI, Mistral, Groq, Ollama, and other compatible APIs)
       const messages = [
-        { role: "system", content: jailbreakPrompt },
-        ...conversationHistory.map((m) => ({
+        { role: "system", content: effectivePrompt },
+        ...(conversationHistory || []).map((m) => ({
           role: m.role,
           content: m.content,
         })),
@@ -214,16 +252,29 @@ serve(async (req) => {
         body: JSON.stringify(requestBody),
       });
 
-      responseData = await response.json();
-      console.log("OpenAI-compatible response status:", response.status);
+      const responseText = await response.text();
+      console.log("OpenAI-compatible response status:", response.status, "Body length:", responseText.length);
 
-      if (!response.ok) {
-        console.error("API Error Response:", JSON.stringify(responseData));
-        throw new Error(responseData.error?.message || `API error: ${response.status}`);
+      if (!responseText) {
+        throw new Error("Empty response from API");
       }
 
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        console.error("Failed to parse OpenAI response:", responseText.substring(0, 500));
+        throw new Error(`Invalid JSON response from API: ${responseText.substring(0, 200)}`);
+      }
+
+      if (!response.ok) {
+        const errorData = responseData as { error?: { message?: string } };
+        console.error("API Error Response:", JSON.stringify(responseData));
+        throw new Error(errorData.error?.message || `API error: ${response.status}`);
+      }
+
+      const openaiData = responseData as { choices?: { message?: { content?: string } }[] };
       return new Response(
-        JSON.stringify({ response: responseData.choices[0]?.message?.content || "No response" }),
+        JSON.stringify({ response: openaiData.choices?.[0]?.message?.content || "No response" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

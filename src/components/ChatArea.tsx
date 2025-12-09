@@ -75,25 +75,25 @@ export function ChatArea({
   return (
     <main className="flex-1 flex flex-col h-full bg-background">
       {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-border bg-surface/30">
-        <div className="flex items-center gap-3">
-          <Terminal className="w-4 h-4 text-primary" />
-          <span className="text-sm text-muted-foreground font-mono">
+      <header className="flex items-center justify-between px-3 md:px-6 py-3 border-b border-border bg-surface/30">
+        <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+          <Terminal className="w-4 h-4 text-primary flex-shrink-0" />
+          <span className="text-xs md:text-sm text-muted-foreground font-mono truncate">
             {getEndpointLabel(apiEndpoint)}
           </span>
-          <span className="text-xs text-muted-foreground/50">|</span>
-          <span className="text-sm text-foreground font-mono">
+          <span className="text-xs text-muted-foreground/50 hidden sm:inline">|</span>
+          <span className="text-xs md:text-sm text-foreground font-mono truncate hidden sm:inline">
             {model || "No model"}
           </span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           {stealthMode && (
-            <span className="px-2 py-0.5 text-xs font-semibold bg-primary/20 text-primary rounded uppercase tracking-wider animate-pulse">
-              Stealth On
+            <span className="px-2 py-0.5 text-[10px] md:text-xs font-semibold bg-primary/20 text-primary rounded uppercase tracking-wider animate-pulse">
+              Stealth
             </span>
           )}
-          <span className="px-2 py-0.5 text-xs font-medium bg-surface text-muted-foreground rounded">
-            {messages.length} messages
+          <span className="px-2 py-0.5 text-[10px] md:text-xs font-medium bg-surface text-muted-foreground rounded">
+            {messages.length}
           </span>
         </div>
       </header>
@@ -101,34 +101,34 @@ export function ChatArea({
       {/* Messages */}
       <div className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-4 max-w-md px-4">
-              <div className="w-20 h-20 mx-auto rounded-xl bg-primary/10 flex items-center justify-center glow-crimson-subtle">
-                <span className="text-4xl">🔓</span>
+          <div className="flex items-center justify-center h-full p-4">
+            <div className="text-center space-y-4 max-w-md">
+              <div className="w-16 h-16 md:w-20 md:h-20 mx-auto rounded-xl bg-primary/10 flex items-center justify-center glow-crimson-subtle">
+                <span className="text-3xl md:text-4xl">🔓</span>
               </div>
               <div>
-                <h2 className="text-2xl font-bold text-foreground">Ready to Test</h2>
-                <p className="text-sm text-muted-foreground mt-2">
-                  Configure your API settings, select a jailbreak template or write your own, 
+                <h2 className="text-xl md:text-2xl font-bold text-foreground">Ready to Test</h2>
+                <p className="text-xs md:text-sm text-muted-foreground mt-2">
+                  Configure your API settings, select a jailbreak template, 
                   then start testing AI model vulnerabilities
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-left">
-                <div className="p-3 rounded-lg bg-surface/50 border border-border">
-                  <p className="text-xs font-semibold text-primary">Step 1</p>
-                  <p className="text-xs text-muted-foreground mt-1">Select a provider & enter API key</p>
+              <div className="grid grid-cols-2 gap-2 md:gap-3 text-left">
+                <div className="p-2 md:p-3 rounded-lg bg-surface/50 border border-border">
+                  <p className="text-[10px] md:text-xs font-semibold text-primary">Step 1</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Select provider & API key</p>
                 </div>
-                <div className="p-3 rounded-lg bg-surface/50 border border-border">
-                  <p className="text-xs font-semibold text-primary">Step 2</p>
-                  <p className="text-xs text-muted-foreground mt-1">Choose a jailbreak template</p>
+                <div className="p-2 md:p-3 rounded-lg bg-surface/50 border border-border">
+                  <p className="text-[10px] md:text-xs font-semibold text-primary">Step 2</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Choose jailbreak template</p>
                 </div>
-                <div className="p-3 rounded-lg bg-surface/50 border border-border">
-                  <p className="text-xs font-semibold text-primary">Step 3</p>
-                  <p className="text-xs text-muted-foreground mt-1">Send test prompts</p>
+                <div className="p-2 md:p-3 rounded-lg bg-surface/50 border border-border">
+                  <p className="text-[10px] md:text-xs font-semibold text-primary">Step 3</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Send test prompts</p>
                 </div>
-                <div className="p-3 rounded-lg bg-surface/50 border border-border">
-                  <p className="text-xs font-semibold text-primary">Step 4</p>
-                  <p className="text-xs text-muted-foreground mt-1">Analyze responses</p>
+                <div className="p-2 md:p-3 rounded-lg bg-surface/50 border border-border">
+                  <p className="text-[10px] md:text-xs font-semibold text-primary">Step 4</p>
+                  <p className="text-[10px] md:text-xs text-muted-foreground mt-1">Analyze responses</p>
                 </div>
               </div>
             </div>
@@ -167,7 +167,7 @@ export function ChatArea({
       </div>
 
       {/* Input */}
-      <div className="p-4 border-t border-border bg-surface/30">
+      <div className="p-3 md:p-4 border-t border-border bg-surface/30">
         <form onSubmit={handleSubmit} className="relative">
           <input
             ref={inputRef}
@@ -177,7 +177,7 @@ export function ChatArea({
             onKeyDown={handleKeyDown}
             placeholder="Enter test query..."
             disabled={isLoading}
-            className="w-full bg-background border border-border rounded-xl px-4 py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary disabled:opacity-50 font-mono"
+            className="w-full bg-background border border-border rounded-xl px-3 md:px-4 py-2.5 md:py-3 pr-12 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary disabled:opacity-50 font-mono"
           />
           <Button
             type="submit"
@@ -188,8 +188,8 @@ export function ChatArea({
             <Send className="w-4 h-4" />
           </Button>
         </form>
-        <p className="text-xs text-muted-foreground text-center mt-2">
-          Press Enter to send • Use templates for pre-built jailbreaks
+        <p className="text-[10px] md:text-xs text-muted-foreground text-center mt-2">
+          Press Enter to send • Use templates for jailbreaks
         </p>
       </div>
     </main>
