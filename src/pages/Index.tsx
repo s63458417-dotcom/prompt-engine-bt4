@@ -5,6 +5,8 @@ import { ChatArea } from "@/components/ChatArea";
 import { Message } from "@/components/ChatMessage";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useConversations } from "@/hooks/useConversations";
+import { useSavedEndpoints } from "@/hooks/useSavedEndpoints";
 import { toast } from "sonner";
 import { Loader2, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,27 @@ const Index = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
+  // Conversation and endpoint hooks
+  const {
+    conversations,
+    currentConversation,
+    setCurrentConversation,
+    loading: conversationsLoading,
+    createConversation,
+    updateConversationTitle,
+    deleteConversation,
+    saveMessage,
+    loadConversationMessages,
+    logUsage,
+  } = useConversations();
+
+  const {
+    savedEndpoints,
+    loading: savedEndpointsLoading,
+    saveEndpoint,
+    deleteEndpoint,
+  } = useSavedEndpoints();
+
   useEffect(() => {
     if (!authLoading && !user) {
       navigate("/auth");
@@ -38,7 +61,37 @@ const Index = () => {
 
   const handleWipeMemory = () => {
     setMessages([]);
+    setCurrentConversation(null);
     toast.success("Memory wiped successfully");
+  };
+
+  const handleNewConversation = () => {
+    setMessages([]);
+    setCurrentConversation(null);
+  };
+
+  const handleSelectConversation = async (conversation: typeof currentConversation) => {
+    if (!conversation) return;
+    
+    setCurrentConversation(conversation);
+    const loadedMessages = await loadConversationMessages(conversation.id);
+    setMessages(loadedMessages);
+    
+    // Restore API settings from conversation
+    if (conversation.api_endpoint) {
+      setApiEndpoint(conversation.api_endpoint);
+    }
+    if (conversation.model) {
+      setModel(conversation.model);
+    }
+  };
+
+  const handleSelectEndpoint = (endpoint: { endpoint_url: string; model_name: string | null }) => {
+    setApiEndpoint(endpoint.endpoint_url);
+    if (endpoint.model_name) {
+      setModel(endpoint.model_name);
+    }
+    toast.success("Endpoint loaded");
   };
 
   const handleSendMessage = async (content: string) => {
@@ -50,6 +103,16 @@ const Index = () => {
     if (!model) {
       toast.error("Please select or enter a model");
       return;
+    }
+
+    // Create conversation if none exists
+    let activeConversation = currentConversation;
+    if (!activeConversation) {
+      activeConversation = await createConversation(apiEndpoint, model);
+      if (!activeConversation) {
+        toast.error("Failed to create conversation");
+        return;
+      }
     }
 
     // Apply stealth mode encoding if enabled
@@ -64,6 +127,9 @@ const Index = () => {
 
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
+
+    // Save user message to database
+    await saveMessage(activeConversation.id, "user", userMessage.content);
 
     try {
       const { data, error } = await supabase.functions.invoke("jailbreak-test", {
@@ -93,6 +159,18 @@ const Index = () => {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Save assistant message to database
+      await saveMessage(activeConversation.id, "assistant", assistantMessage.content);
+
+      // Log usage
+      await logUsage(apiEndpoint, model);
+
+      // Update conversation title based on first message
+      if (messages.length === 0) {
+        const title = content.slice(0, 50) + (content.length > 50 ? "..." : "");
+        await updateConversationTitle(activeConversation.id, title);
+      }
     } catch (error) {
       console.error("Error:", error);
       toast.error(error instanceof Error ? error.message : "Failed to get response");
@@ -138,6 +216,19 @@ const Index = () => {
       messages={messages}
       isAdmin={isAdmin}
       onSignOut={signOut}
+      // Conversation history props
+      conversations={conversations}
+      currentConversation={currentConversation}
+      conversationsLoading={conversationsLoading}
+      onSelectConversation={handleSelectConversation}
+      onNewConversation={handleNewConversation}
+      onDeleteConversation={deleteConversation}
+      // Saved endpoints props
+      savedEndpoints={savedEndpoints}
+      savedEndpointsLoading={savedEndpointsLoading}
+      onSelectEndpoint={handleSelectEndpoint}
+      onSaveEndpoint={saveEndpoint}
+      onDeleteEndpoint={deleteEndpoint}
     />
   );
 
