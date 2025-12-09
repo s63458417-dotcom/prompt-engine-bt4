@@ -53,57 +53,70 @@ export default function Auth() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!username.trim()) {
+    const trimmedUsername = username.trim();
+    
+    // Client-side validation
+    if (!trimmedUsername) {
       toast.error("Username is required");
       return;
     }
 
-    if (password.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    if (!/^[a-zA-Z0-9_-]{3,50}$/.test(trimmedUsername)) {
+      toast.error("Invalid username format");
+      return;
+    }
+
+    if (!password) {
+      toast.error("Password is required");
+      return;
+    }
+
+    if (password.length < 6 || password.length > 128) {
+      toast.error("Password must be 6-128 characters");
       return;
     }
 
     setLoading(true);
     try {
-      const { data: profile, error: profileError } = await supabase
-        .from("profiles")
-        .select("user_id")
-        .eq("username", username.trim())
-        .maybeSingle();
-
-      if (profileError || !profile) {
-        toast.error("Invalid username or password");
-        setLoading(false);
-        return;
-      }
-
-      const { data: userData, error: userError } = await supabase.functions.invoke("get-user-email", {
-        body: { userId: profile.user_id },
-      });
-
-      if (userError || !userData?.email) {
-        toast.error("Invalid username or password");
-        setLoading(false);
-        return;
-      }
-
-      const { error } = await supabase.auth.signInWithPassword({
-        email: userData.email,
-        password,
+      // Use the secure server-side login function
+      const { data, error } = await supabase.functions.invoke("login-with-username", {
+        body: { username: trimmedUsername, password },
       });
 
       if (error) {
-        if (error.message.includes("Invalid login credentials")) {
-          toast.error("Invalid username or password");
-        } else {
-          toast.error(error.message);
-        }
+        console.error("Login error:", error);
+        toast.error("Invalid username or password");
+        setLoading(false);
         return;
       }
 
-      toast.success("Welcome back!");
-      navigate("/");
+      if (data?.error) {
+        toast.error(data.error);
+        setLoading(false);
+        return;
+      }
+
+      if (data?.session) {
+        // Set the session from the server response
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token,
+        });
+
+        if (sessionError) {
+          console.error("Session error:", sessionError);
+          toast.error("Failed to establish session");
+          setLoading(false);
+          return;
+        }
+
+        toast.success("Welcome back!");
+        navigate("/");
+      } else {
+        toast.error("Invalid username or password");
+      }
     } catch (error) {
+      console.error("Login error:", error);
       toast.error("An unexpected error occurred");
     } finally {
       setLoading(false);
@@ -148,6 +161,8 @@ export default function Auth() {
                 placeholder="Enter username..."
                 className="bg-input border-border font-mono"
                 required
+                maxLength={50}
+                autoComplete="username"
               />
             </div>
 
@@ -162,6 +177,8 @@ export default function Auth() {
                 placeholder="Enter password..."
                 className="bg-input border-border font-mono"
                 required
+                maxLength={128}
+                autoComplete="current-password"
               />
             </div>
 
