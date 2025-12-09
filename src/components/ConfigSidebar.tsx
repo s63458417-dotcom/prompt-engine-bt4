@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { 
   Eye, EyeOff, RefreshCw, Skull, Shield, Zap, Download, 
   TestTube, BookOpen, BarChart3, ChevronDown, ChevronRight,
-  Loader2, CheckCircle, XCircle
+  Loader2, CheckCircle, XCircle, LogOut, Settings
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -32,6 +33,8 @@ interface ConfigSidebarProps {
   setJailbreakPrompt: (prompt: string) => void;
   onWipeMemory: () => void;
   messages: Message[];
+  isAdmin?: boolean;
+  onSignOut?: () => void;
 }
 
 const PROVIDERS = [
@@ -100,7 +103,10 @@ export function ConfigSidebar({
   setJailbreakPrompt,
   onWipeMemory,
   messages,
+  isAdmin,
+  onSignOut,
 }: ConfigSidebarProps) {
+  const navigate = useNavigate();
   const [showApiKey, setShowApiKey] = useState(false);
   const [customEndpoint, setCustomEndpoint] = useState("");
   const [customModel, setCustomModel] = useState("");
@@ -220,17 +226,48 @@ export function ConfigSidebar({
     toast.success("Session exported successfully");
   };
 
+  const handleSignOut = async () => {
+    if (onSignOut) {
+      await onSignOut();
+      navigate("/auth");
+    }
+  };
+
   return (
     <aside className="w-80 bg-sidebar border-r border-sidebar-border flex flex-col h-full">
       {/* Header */}
       <div className="p-4 border-b border-sidebar-border">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center glow-crimson-subtle">
-            <Skull className="w-6 h-6 text-primary" />
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center glow-crimson-subtle">
+              <Skull className="w-6 h-6 text-primary" />
+            </div>
+            <div>
+              <h1 className="font-bold text-lg text-foreground">JailbreakLab</h1>
+              <p className="text-xs text-muted-foreground">AI Pentesting Suite v2.0</p>
+            </div>
           </div>
-          <div>
-            <h1 className="font-bold text-lg text-foreground">JailbreakLab</h1>
-            <p className="text-xs text-muted-foreground">AI Pentesting Suite v2.0</p>
+          <div className="flex items-center gap-1">
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate("/admin")}
+                className="h-8 w-8"
+                title="Admin Panel"
+              >
+                <Settings className="w-4 h-4" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleSignOut}
+              className="h-8 w-8"
+              title="Sign Out"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
         </div>
       </div>
