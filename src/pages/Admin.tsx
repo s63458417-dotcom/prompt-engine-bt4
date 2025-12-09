@@ -8,9 +8,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { 
   Skull, ArrowLeft, Users, KeyRound, Plus, Copy, Check, 
   Trash2, Loader2, UserPlus, Shield, Clock, Settings, Save,
-  Upload, Image as ImageIcon
+  Upload, Image as ImageIcon, Activity
 } from "lucide-react";
 import { toast } from "sonner";
+import { AdminUserActivity } from "@/components/AdminUserActivity";
 
 interface InviteCode {
   id: string;
@@ -682,6 +683,15 @@ export default function Admin() {
               </div>
             )}
           </div>
+        </section>
+
+        {/* User Activity Section */}
+        <section className="space-y-4">
+          <div className="flex items-center gap-2">
+            <Activity className="w-5 h-5 text-primary" />
+            <h2 className="text-lg font-semibold text-foreground">User Activity</h2>
+          </div>
+          <AdminUserActivity />
         </section>
       </main>
     </div>

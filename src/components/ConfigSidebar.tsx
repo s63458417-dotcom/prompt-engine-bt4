@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { 
   Eye, EyeOff, RefreshCw, Skull, Shield, Zap, Download, 
   TestTube, BookOpen, BarChart3, ChevronDown, ChevronRight,
-  Loader2, CheckCircle, XCircle, LogOut, Settings
+  Loader2, CheckCircle, XCircle, LogOut, Settings, MessageSquare
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
@@ -16,10 +16,14 @@ import {
 } from "@/components/ui/select";
 import { PromptTemplates } from "./PromptTemplates";
 import { ResponseAnalysis } from "./ResponseAnalysis";
+import { ConversationHistory } from "./ConversationHistory";
+import { SavedEndpoints } from "./SavedEndpoints";
 import { Message } from "./ChatMessage";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { SiteLogo, useSiteSettings } from "@/hooks/useSiteSettings";
+import { Conversation } from "@/hooks/useConversations";
+import { SavedEndpoint } from "@/hooks/useSavedEndpoints";
 
 interface ConfigSidebarProps {
   apiKey: string;
@@ -36,6 +40,19 @@ interface ConfigSidebarProps {
   messages: Message[];
   isAdmin?: boolean;
   onSignOut?: () => void;
+  // Conversation history props
+  conversations: Conversation[];
+  currentConversation: Conversation | null;
+  conversationsLoading: boolean;
+  onSelectConversation: (conversation: Conversation) => void;
+  onNewConversation: () => void;
+  onDeleteConversation: (id: string) => void;
+  // Saved endpoints props
+  savedEndpoints: SavedEndpoint[];
+  savedEndpointsLoading: boolean;
+  onSelectEndpoint: (endpoint: SavedEndpoint) => void;
+  onSaveEndpoint: (name: string, endpoint: string, model?: string) => Promise<any>;
+  onDeleteEndpoint: (id: string) => void;
 }
 
 const PROVIDERS = [
@@ -89,7 +106,7 @@ const PROVIDERS = [
   },
 ];
 
-type SectionId = "api" | "templates" | "analysis";
+type SectionId = "api" | "templates" | "analysis" | "history";
 
 export function ConfigSidebar({
   apiKey,
@@ -106,6 +123,17 @@ export function ConfigSidebar({
   messages,
   isAdmin,
   onSignOut,
+  conversations,
+  currentConversation,
+  conversationsLoading,
+  onSelectConversation,
+  onNewConversation,
+  onDeleteConversation,
+  savedEndpoints,
+  savedEndpointsLoading,
+  onSelectEndpoint,
+  onSaveEndpoint,
+  onDeleteEndpoint,
 }: ConfigSidebarProps) {
   const navigate = useNavigate();
   const siteSettings = useSiteSettings();
@@ -285,6 +313,37 @@ export function ConfigSidebar({
 
       {/* Scrollable Content */}
       <div className="flex-1 overflow-y-auto">
+        {/* Conversation History Section */}
+        <div className="border-b border-sidebar-border">
+          <button
+            onClick={() => toggleSection("history" as SectionId)}
+            className="w-full flex items-center justify-between p-4 hover:bg-surface/50 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <MessageSquare className="w-4 h-4 text-primary" />
+              <span className="font-medium text-sm">Chat History</span>
+            </div>
+            {expandedSections.includes("history" as SectionId) ? (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            )}
+          </button>
+
+          {expandedSections.includes("history" as SectionId) && (
+            <div className="p-4 pt-0">
+              <ConversationHistory
+                conversations={conversations}
+                currentConversation={currentConversation}
+                loading={conversationsLoading}
+                onSelect={onSelectConversation}
+                onNew={onNewConversation}
+                onDelete={onDeleteConversation}
+              />
+            </div>
+          )}
+        </div>
+
         {/* API Config Section */}
         <div className="border-b border-sidebar-border">
           <button
@@ -304,6 +363,16 @@ export function ConfigSidebar({
 
           {expandedSections.includes("api") && (
             <div className="p-4 pt-0 space-y-4">
+              {/* Saved Endpoints */}
+              <SavedEndpoints
+                savedEndpoints={savedEndpoints}
+                loading={savedEndpointsLoading}
+                currentEndpoint={apiEndpoint}
+                currentModel={model}
+                onSelect={onSelectEndpoint}
+                onSave={onSaveEndpoint}
+                onDelete={onDeleteEndpoint}
+              />
               {/* Provider Selection */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
