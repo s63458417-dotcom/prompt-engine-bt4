@@ -5,10 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skull, Loader2, LogIn } from "lucide-react";
 import { toast } from "sonner";
-import { z } from "zod";
-
-const emailSchema = z.string().email("Invalid email address");
-const passwordSchema = z.string().min(6, "Password must be at least 6 characters");
 
 interface SiteSettings {
   site_name: string;
@@ -18,7 +14,7 @@ interface SiteSettings {
 }
 
 export default function Auth() {
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [settings, setSettings] = useState<SiteSettings>({
@@ -54,43 +50,54 @@ export default function Auth() {
     fetchSettings();
   }, [navigate]);
 
-  const validateInputs = () => {
-    try {
-      emailSchema.parse(email);
-    } catch (e) {
-      if (e instanceof z.ZodError) {
-        toast.error(e.errors[0].message);
-        return false;
-      }
-    }
-
-    try {
-      passwordSchema.parse(password);
-    } catch (e) {
-      if (e instanceof z.ZodError) {
-        toast.error(e.errors[0].message);
-        return false;
-      }
-    }
-
-    return true;
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!validateInputs()) return;
+    if (!username.trim()) {
+      toast.error("Username is required");
+      return;
+    }
+
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
 
     setLoading(true);
     try {
+      // First, look up the email by username
+      const { data: profile, error: profileError } = await supabase
+        .from("profiles")
+        .select("user_id")
+        .eq("username", username.trim())
+        .maybeSingle();
+
+      if (profileError || !profile) {
+        toast.error("Invalid username or password");
+        setLoading(false);
+        return;
+      }
+
+      // Get user email from auth.users via edge function
+      const { data: userData, error: userError } = await supabase.functions.invoke("get-user-email", {
+        body: { userId: profile.user_id },
+      });
+
+      if (userError || !userData?.email) {
+        toast.error("Invalid username or password");
+        setLoading(false);
+        return;
+      }
+
+      // Now sign in with the email
       const { error } = await supabase.auth.signInWithPassword({
-        email,
+        email: userData.email,
         password,
       });
 
       if (error) {
         if (error.message.includes("Invalid login credentials")) {
-          toast.error("Invalid email or password");
+          toast.error("Invalid username or password");
         } else {
           toast.error(error.message);
         }
@@ -128,13 +135,13 @@ export default function Auth() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                Email
+                Username
               </label>
               <Input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter email..."
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter username..."
                 className="bg-input border-border font-mono"
                 required
               />
