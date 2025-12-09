@@ -1,0 +1,4 @@
+project_id = "yjctmsivcaouvehmxtkc"
+
+[functions.jailbreak-test]
+verify_jwt = false
