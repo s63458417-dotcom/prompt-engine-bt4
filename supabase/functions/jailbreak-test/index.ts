@@ -13,6 +13,7 @@ interface RequestBody {
   userMessage: string;
   stealthMode: boolean;
   conversationHistory: { role: string; content: string }[];
+  testMode?: boolean;
 }
 
 serve(async (req) => {
@@ -23,13 +24,14 @@ serve(async (req) => {
 
   try {
     const body: RequestBody = await req.json();
-    const { apiKey, apiEndpoint, model, jailbreakPrompt, userMessage, stealthMode, conversationHistory } = body;
+    const { apiKey, apiEndpoint, model, jailbreakPrompt, userMessage, stealthMode, conversationHistory, testMode } = body;
 
     console.log("Jailbreak test request received:", {
       endpoint: apiEndpoint,
       model,
       stealthMode,
       historyLength: conversationHistory.length,
+      testMode,
     });
 
     // Validate required fields
@@ -41,8 +43,10 @@ serve(async (req) => {
     }
 
     // Determine API type based on endpoint
-    const isOpenAI = apiEndpoint.includes("openai");
     const isAnthropic = apiEndpoint.includes("anthropic");
+    const isGoogle = apiEndpoint.includes("generativelanguage.googleapis.com");
+    const isCohere = apiEndpoint.includes("cohere");
+    const isMistral = apiEndpoint.includes("mistral");
 
     let response;
     let responseData;
@@ -83,8 +87,81 @@ serve(async (req) => {
         JSON.stringify({ response: responseData.content[0]?.text || "No response" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
+    } else if (isGoogle) {
+      // Google Gemini API format
+      const contents = [
+        ...conversationHistory.map((m) => ({
+          role: m.role === "assistant" ? "model" : "user",
+          parts: [{ text: m.content }],
+        })),
+        { role: "user", parts: [{ text: userMessage }] },
+      ];
+
+      response = await fetch(
+        `${apiEndpoint}/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: jailbreakPrompt }] },
+            contents,
+            generationConfig: {
+              maxOutputTokens: 4096,
+              temperature: 0.7,
+            },
+          }),
+        }
+      );
+
+      responseData = await response.json();
+      console.log("Google response status:", response.status);
+
+      if (!response.ok) {
+        throw new Error(responseData.error?.message || `Google API error: ${response.status}`);
+      }
+
+      return new Response(
+        JSON.stringify({ 
+          response: responseData.candidates?.[0]?.content?.parts?.[0]?.text || "No response" 
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    } else if (isCohere) {
+      // Cohere API format
+      const chatHistory = conversationHistory.map((m) => ({
+        role: m.role === "assistant" ? "CHATBOT" : "USER",
+        message: m.content,
+      }));
+
+      response = await fetch(`${apiEndpoint}/chat`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model,
+          message: userMessage,
+          preamble: jailbreakPrompt,
+          chat_history: chatHistory,
+        }),
+      });
+
+      responseData = await response.json();
+      console.log("Cohere response status:", response.status);
+
+      if (!response.ok) {
+        throw new Error(responseData.message || `Cohere API error: ${response.status}`);
+      }
+
+      return new Response(
+        JSON.stringify({ response: responseData.text || "No response" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     } else {
-      // OpenAI-compatible API format (works for OpenAI, Azure, and other compatible APIs)
+      // OpenAI-compatible API format (works for OpenAI, Mistral, Groq, Ollama, and other compatible APIs)
       const messages = [
         { role: "system", content: jailbreakPrompt },
         ...conversationHistory.map((m) => ({
@@ -94,24 +171,31 @@ serve(async (req) => {
         { role: "user", content: userMessage },
       ];
 
+      const requestBody: Record<string, unknown> = {
+        model,
+        messages,
+        max_tokens: 4096,
+      };
+
+      // Only add temperature for models that support it (not o1-preview, o1-mini)
+      if (!model.startsWith("o1-")) {
+        requestBody.temperature = 0.7;
+      }
+
       response = await fetch(`${apiEndpoint}/chat/completions`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({
-          model,
-          messages,
-          max_tokens: 4096,
-          temperature: 0.7,
-        }),
+        body: JSON.stringify(requestBody),
       });
 
       responseData = await response.json();
-      console.log("OpenAI response status:", response.status);
+      console.log("OpenAI-compatible response status:", response.status);
 
       if (!response.ok) {
+        console.error("API Error Response:", JSON.stringify(responseData));
         throw new Error(responseData.error?.message || `API error: ${response.status}`);
       }
 
