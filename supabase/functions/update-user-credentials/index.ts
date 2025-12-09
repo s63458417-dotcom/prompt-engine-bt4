@@ -5,6 +5,20 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+// Validation helpers
+const isValidUsername = (username: string): boolean => {
+  if (!username || typeof username !== "string") return false;
+  const trimmed = username.trim();
+  // Username: 3-50 chars, alphanumeric, underscores, hyphens only
+  return /^[a-zA-Z0-9_-]{3,50}$/.test(trimmed);
+};
+
+const isValidPassword = (password: string): boolean => {
+  if (!password || typeof password !== "string") return false;
+  // Password: 6-128 chars
+  return password.length >= 6 && password.length <= 128;
+};
+
 Deno.serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === "OPTIONS") {
@@ -41,6 +55,34 @@ Deno.serve(async (req) => {
     }
 
     const { newUsername, newPassword } = await req.json();
+
+    // Validate at least one field is provided
+    if (!newUsername && !newPassword) {
+      return new Response(
+        JSON.stringify({ error: "At least one of newUsername or newPassword is required" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate username if provided
+    if (newUsername !== undefined && newUsername !== null && newUsername !== "") {
+      if (!isValidUsername(newUsername)) {
+        return new Response(
+          JSON.stringify({ error: "Invalid username. Must be 3-50 characters, alphanumeric with underscores/hyphens only." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // Validate password if provided
+    if (newPassword !== undefined && newPassword !== null && newPassword !== "") {
+      if (!isValidPassword(newPassword)) {
+        return new Response(
+          JSON.stringify({ error: "Invalid password. Must be 6-128 characters." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
 
     // Create admin client for updates
     const supabaseAdmin = createClient(

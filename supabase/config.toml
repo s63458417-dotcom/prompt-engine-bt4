@@ -7,7 +7,10 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.get-user-email]
-verify_jwt = false
+verify_jwt = true
 
 [functions.update-user-credentials]
 verify_jwt = true
+
+[functions.login-with-username]
+verify_jwt = false
