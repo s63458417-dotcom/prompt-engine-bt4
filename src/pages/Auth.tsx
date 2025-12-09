@@ -11,6 +11,7 @@ interface SiteSettings {
   site_description: string;
   footer_text: string;
   login_subtitle: string;
+  logo_url: string;
 }
 
 export default function Auth() {
@@ -22,18 +23,17 @@ export default function Auth() {
     site_description: "AI Security Testing Suite",
     footer_text: "AI Pentesting Suite v2.0 • For authorized research only",
     login_subtitle: "Access your testing suite",
+    logo_url: "",
   });
   const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if user is already logged in
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session) {
         navigate("/");
       }
     });
 
-    // Fetch site settings
     const fetchSettings = async () => {
       const { data } = await supabase
         .from("site_settings")
@@ -65,7 +65,6 @@ export default function Auth() {
 
     setLoading(true);
     try {
-      // First, look up the email by username
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
         .select("user_id")
@@ -78,7 +77,6 @@ export default function Auth() {
         return;
       }
 
-      // Get user email from auth.users via edge function
       const { data: userData, error: userError } = await supabase.functions.invoke("get-user-email", {
         body: { userId: profile.user_id },
       });
@@ -89,7 +87,6 @@ export default function Auth() {
         return;
       }
 
-      // Now sign in with the email
       const { error } = await supabase.auth.signInWithPassword({
         email: userData.email,
         password,
@@ -118,8 +115,16 @@ export default function Auth() {
       <div className="w-full max-w-md">
         {/* Header */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center mx-auto mb-4 glow-crimson-subtle">
-            <Skull className="w-10 h-10 text-primary" />
+          <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center mx-auto mb-4 glow-crimson-subtle overflow-hidden">
+            {settings.logo_url ? (
+              <img 
+                src={settings.logo_url} 
+                alt="Logo" 
+                className="w-full h-full object-contain"
+              />
+            ) : (
+              <Skull className="w-10 h-10 text-primary" />
+            )}
           </div>
           <h1 className="text-2xl font-bold text-foreground mb-2 font-mono">
             {settings.site_name}
@@ -131,7 +136,6 @@ export default function Auth() {
 
         {/* Form Card */}
         <div className="bg-card border border-border rounded-xl p-6 space-y-6">
-          {/* Form */}
           <form onSubmit={handleLogin} className="space-y-4">
             <div className="space-y-2">
               <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">

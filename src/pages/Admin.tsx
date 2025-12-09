@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { 
   Skull, ArrowLeft, Users, KeyRound, Plus, Copy, Check, 
-  Trash2, Loader2, UserPlus, Shield, Clock, Settings, Save
+  Trash2, Loader2, UserPlus, Shield, Clock, Settings, Save,
+  Upload, Image as ImageIcon
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -47,6 +48,10 @@ export default function Admin() {
   const [editedSettings, setEditedSettings] = useState<Record<string, string>>({});
   const [savingSettings, setSavingSettings] = useState(false);
   
+  // Logo upload
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  
   // Direct user creation
   const [showCreateUser, setShowCreateUser] = useState(false);
   const [newUsername, setNewUsername] = useState("");
@@ -77,19 +82,16 @@ export default function Admin() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Fetch invite codes
       const { data: codes } = await supabase
         .from("invite_codes")
         .select("*")
         .order("created_at", { ascending: false });
 
-      // Fetch users
       const { data: profiles } = await supabase
         .from("profiles")
         .select("*")
         .order("created_at", { ascending: false });
 
-      // Fetch site settings
       const { data: settings } = await supabase
         .from("site_settings")
         .select("*")
@@ -99,7 +101,6 @@ export default function Admin() {
       setUsers(profiles || []);
       setSiteSettings(settings || []);
       
-      // Initialize edited settings
       if (settings) {
         const initialSettings = settings.reduce((acc, s) => {
           acc[s.setting_key] = s.setting_value;
@@ -114,10 +115,83 @@ export default function Admin() {
     }
   };
 
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file");
+      return;
+    }
+
+    if (file.size > 2 * 1024 * 1024) {
+      toast.error("Image must be less than 2MB");
+      return;
+    }
+
+    setUploadingLogo(true);
+    try {
+      const fileExt = file.name.split(".").pop();
+      const fileName = `logo.${fileExt}`;
+
+      // Delete old logo if exists
+      await supabase.storage.from("site-assets").remove([fileName]);
+
+      // Upload new logo
+      const { error: uploadError } = await supabase.storage
+        .from("site-assets")
+        .upload(fileName, file, { upsert: true });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from("site-assets")
+        .getPublicUrl(fileName);
+
+      // Update setting
+      const { error: updateError } = await supabase
+        .from("site_settings")
+        .update({ setting_value: publicUrl, updated_at: new Date().toISOString() })
+        .eq("setting_key", "logo_url");
+
+      if (updateError) throw updateError;
+
+      setEditedSettings(prev => ({ ...prev, logo_url: publicUrl }));
+      toast.success("Logo uploaded successfully!");
+      fetchData();
+    } catch (error) {
+      toast.error("Failed to upload logo");
+      console.error(error);
+    } finally {
+      setUploadingLogo(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+    }
+  };
+
+  const removeLogo = async () => {
+    try {
+      // Clear the setting
+      const { error } = await supabase
+        .from("site_settings")
+        .update({ setting_value: "", updated_at: new Date().toISOString() })
+        .eq("setting_key", "logo_url");
+
+      if (error) throw error;
+
+      setEditedSettings(prev => ({ ...prev, logo_url: "" }));
+      toast.success("Logo removed");
+      fetchData();
+    } catch (error) {
+      toast.error("Failed to remove logo");
+    }
+  };
+
   const generateInviteCode = async () => {
     setGeneratingCode(true);
     try {
-      // Generate a random code
       const code = `JBL-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       
       const expiresAt = new Date();
@@ -178,7 +252,6 @@ export default function Admin() {
 
     setCreatingUser(true);
     try {
-      // Check if username is taken
       const { data: existingUser } = await supabase
         .from("profiles")
         .select("username")
@@ -191,7 +264,6 @@ export default function Admin() {
         return;
       }
 
-      // Create user via edge function for admin operations
       const { data, error } = await supabase.functions.invoke("admin-create-user", {
         body: {
           email: newEmail,
@@ -223,6 +295,7 @@ export default function Admin() {
     setSavingSettings(true);
     try {
       for (const setting of siteSettings) {
+        if (setting.setting_key === "logo_url") continue; // Logo is handled separately
         const newValue = editedSettings[setting.setting_key];
         if (newValue !== setting.setting_value) {
           const { error } = await supabase
@@ -248,6 +321,7 @@ export default function Admin() {
       site_description: "Site Description",
       footer_text: "Footer Text",
       login_subtitle: "Login Page Subtitle",
+      logo_url: "Logo",
     };
     return labels[key] || key;
   };
@@ -259,6 +333,8 @@ export default function Admin() {
       </div>
     );
   }
+
+  const logoUrl = editedSettings.logo_url;
 
   return (
     <div className="min-h-screen bg-background">
@@ -308,29 +384,95 @@ export default function Admin() {
             </Button>
           </div>
 
-          <div className="bg-card border border-border rounded-xl p-6 space-y-4">
-            {siteSettings.map((setting) => (
-              <div key={setting.id} className="space-y-2">
-                <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  {getSettingLabel(setting.setting_key)}
-                </label>
-                {setting.setting_key === "footer_text" ? (
-                  <Textarea
-                    value={editedSettings[setting.setting_key] || ""}
-                    onChange={(e) => updateSetting(setting.setting_key, e.target.value)}
-                    className="bg-input border-border font-mono text-sm"
-                    rows={2}
+          <div className="bg-card border border-border rounded-xl p-6 space-y-6">
+            {/* Logo Upload Section */}
+            <div className="space-y-3">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
+                <ImageIcon className="w-4 h-4" />
+                Site Logo
+              </label>
+              
+              <div className="flex items-center gap-4">
+                {/* Logo Preview */}
+                <div className="w-20 h-20 rounded-lg bg-surface border border-border flex items-center justify-center overflow-hidden">
+                  {logoUrl ? (
+                    <img 
+                      src={logoUrl} 
+                      alt="Site Logo" 
+                      className="w-full h-full object-contain"
+                    />
+                  ) : (
+                    <Skull className="w-10 h-10 text-primary" />
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleLogoUpload}
+                    className="hidden"
                   />
-                ) : (
-                  <Input
-                    type="text"
-                    value={editedSettings[setting.setting_key] || ""}
-                    onChange={(e) => updateSetting(setting.setting_key, e.target.value)}
-                    className="bg-input border-border font-mono"
-                  />
-                )}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingLogo}
+                    className="gap-2"
+                  >
+                    {uploadingLogo ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4" />
+                    )}
+                    {uploadingLogo ? "Uploading..." : "Upload Logo"}
+                  </Button>
+                  
+                  {logoUrl && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={removeLogo}
+                      className="gap-2 text-destructive hover:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Remove Logo
+                    </Button>
+                  )}
+                  
+                  <p className="text-xs text-muted-foreground">
+                    Recommended: Square image, max 2MB
+                  </p>
+                </div>
               </div>
-            ))}
+            </div>
+
+            {/* Other Settings */}
+            {siteSettings
+              .filter(s => s.setting_key !== "logo_url")
+              .map((setting) => (
+                <div key={setting.id} className="space-y-2">
+                  <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                    {getSettingLabel(setting.setting_key)}
+                  </label>
+                  {setting.setting_key === "footer_text" ? (
+                    <Textarea
+                      value={editedSettings[setting.setting_key] || ""}
+                      onChange={(e) => updateSetting(setting.setting_key, e.target.value)}
+                      className="bg-input border-border font-mono text-sm"
+                      rows={2}
+                    />
+                  ) : (
+                    <Input
+                      type="text"
+                      value={editedSettings[setting.setting_key] || ""}
+                      onChange={(e) => updateSetting(setting.setting_key, e.target.value)}
+                      className="bg-input border-border font-mono"
+                    />
+                  )}
+                </div>
+              ))}
           </div>
         </section>
 

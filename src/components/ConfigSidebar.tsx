@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   Eye, EyeOff, RefreshCw, Skull, Shield, Zap, Download, 
@@ -19,6 +19,7 @@ import { ResponseAnalysis } from "./ResponseAnalysis";
 import { Message } from "./ChatMessage";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { SiteLogo, useSiteSettings } from "@/hooks/useSiteSettings";
 
 interface ConfigSidebarProps {
   apiKey: string;
@@ -107,6 +108,7 @@ export function ConfigSidebar({
   onSignOut,
 }: ConfigSidebarProps) {
   const navigate = useNavigate();
+  const siteSettings = useSiteSettings();
   const [showApiKey, setShowApiKey] = useState(false);
   const [customEndpoint, setCustomEndpoint] = useState("");
   const [customModel, setCustomModel] = useState("");
@@ -239,12 +241,12 @@ export function ConfigSidebar({
       <div className="p-4 border-b border-sidebar-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center glow-crimson-subtle">
-              <Skull className="w-6 h-6 text-primary" />
+            <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center glow-crimson-subtle overflow-hidden">
+              <SiteLogo className="w-6 h-6" />
             </div>
             <div>
-              <h1 className="font-bold text-lg text-foreground">JailbreakLab</h1>
-              <p className="text-xs text-muted-foreground">AI Pentesting Suite v2.0</p>
+              <h1 className="font-bold text-lg text-foreground">{siteSettings.site_name}</h1>
+              <p className="text-xs text-muted-foreground">{siteSettings.site_description}</p>
             </div>
           </div>
           <div className="flex items-center gap-1">
