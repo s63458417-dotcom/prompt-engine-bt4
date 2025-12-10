@@ -34,10 +34,17 @@ serve(async (req) => {
       testMode,
     });
 
-    // Validate required fields
-    if (!apiKey || !apiEndpoint || !model) {
+    // Validate required fields (API key optional for Ollama)
+    const isOllama = apiEndpoint.includes("localhost:11434") || apiEndpoint.includes("127.0.0.1:11434");
+    if (!apiEndpoint || !model) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: apiKey, apiEndpoint, or model" }),
+        JSON.stringify({ error: "Missing required fields: apiEndpoint or model" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+    if (!apiKey && !isOllama) {
+      return new Response(
+        JSON.stringify({ error: "API key is required for this provider" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -243,12 +250,17 @@ serve(async (req) => {
         requestBody.temperature = 0.7;
       }
 
+      // Build headers - Authorization optional for Ollama
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (apiKey) {
+        headers["Authorization"] = `Bearer ${apiKey}`;
+      }
+
       response = await fetch(`${apiEndpoint}/chat/completions`, {
         method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
+        headers,
         body: JSON.stringify(requestBody),
       });
 
