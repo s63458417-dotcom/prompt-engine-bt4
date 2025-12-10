@@ -23,14 +23,36 @@ const Index = () => {
   const { user, loading: authLoading, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
   
-  const [apiKey, setApiKey] = useState("");
-  const [apiEndpoint, setApiEndpoint] = useState("https://api.openai.com/v1");
-  const [model, setModel] = useState("gpt-4o");
-  const [stealthMode, setStealthMode] = useState(false);
-  const [jailbreakPrompt, setJailbreakPrompt] = useState(DEFAULT_JAILBREAK);
+  // Persist API config in localStorage
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("jbl_apiKey") || "");
+  const [apiEndpoint, setApiEndpoint] = useState(() => localStorage.getItem("jbl_apiEndpoint") || "https://api.openai.com/v1");
+  const [model, setModel] = useState(() => localStorage.getItem("jbl_model") || "gpt-4o");
+  const [stealthMode, setStealthMode] = useState(() => localStorage.getItem("jbl_stealthMode") === "true");
+  const [jailbreakPrompt, setJailbreakPrompt] = useState(() => localStorage.getItem("jbl_jailbreakPrompt") || DEFAULT_JAILBREAK);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Persist settings to localStorage
+  useEffect(() => {
+    localStorage.setItem("jbl_apiKey", apiKey);
+  }, [apiKey]);
+
+  useEffect(() => {
+    localStorage.setItem("jbl_apiEndpoint", apiEndpoint);
+  }, [apiEndpoint]);
+
+  useEffect(() => {
+    localStorage.setItem("jbl_model", model);
+  }, [model]);
+
+  useEffect(() => {
+    localStorage.setItem("jbl_stealthMode", String(stealthMode));
+  }, [stealthMode]);
+
+  useEffect(() => {
+    localStorage.setItem("jbl_jailbreakPrompt", jailbreakPrompt);
+  }, [jailbreakPrompt]);
 
   // Conversation and endpoint hooks
   const {
@@ -91,7 +113,8 @@ const Index = () => {
     if (endpoint.model_name) {
       setModel(endpoint.model_name);
     }
-    toast.success("Endpoint loaded");
+    toast.success(`Endpoint loaded: ${endpoint.model_name || endpoint.endpoint_url}`);
+    setSidebarOpen(false); // Close mobile sidebar after selection
   };
 
   const handleSendMessage = async (content: string) => {

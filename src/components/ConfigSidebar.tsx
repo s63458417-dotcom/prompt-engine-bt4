@@ -138,12 +138,31 @@ export function ConfigSidebar({
   const navigate = useNavigate();
   const siteSettings = useSiteSettings();
   const [showApiKey, setShowApiKey] = useState(false);
-  const [customEndpoint, setCustomEndpoint] = useState("");
-  const [customModel, setCustomModel] = useState("");
-  const [selectedProvider, setSelectedProvider] = useState("openai");
-  const [expandedSections, setExpandedSections] = useState<SectionId[]>(["api"]);
+  const [customEndpoint, setCustomEndpoint] = useState(apiEndpoint);
+  const [customModel, setCustomModel] = useState(model);
+  
+  // Detect provider from endpoint
+  const detectProvider = (endpoint: string) => {
+    const provider = PROVIDERS.find(p => p.id !== "custom" && endpoint.includes(p.endpoint.replace("https://", "").split("/")[0]));
+    return provider?.id || "custom";
+  };
+  
+  const [selectedProvider, setSelectedProvider] = useState(() => detectProvider(apiEndpoint));
+  const [expandedSections, setExpandedSections] = useState<SectionId[]>(["api", "history"]);
   const [testingConnection, setTestingConnection] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<"none" | "success" | "error">("none");
+
+  // Sync provider when endpoint changes externally (e.g., from saved endpoints)
+  useEffect(() => {
+    const detected = detectProvider(apiEndpoint);
+    if (detected !== selectedProvider) {
+      setSelectedProvider(detected);
+      if (detected === "custom") {
+        setCustomEndpoint(apiEndpoint);
+        setCustomModel(model);
+      }
+    }
+  }, [apiEndpoint]);
 
   const currentProvider = PROVIDERS.find(p => p.id === selectedProvider);
 
