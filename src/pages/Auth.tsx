@@ -45,6 +45,11 @@ export default function Auth() {
           return acc;
         }, {} as SiteSettings);
         setSettings(prev => ({ ...prev, ...settingsMap }));
+        
+        // Update document title with site name
+        if (settingsMap.site_name) {
+          document.title = `${settingsMap.site_name} - Login`;
+        }
       }
     };
     fetchSettings();
