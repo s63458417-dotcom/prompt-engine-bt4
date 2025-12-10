@@ -23,36 +23,54 @@ const Index = () => {
   const { user, loading: authLoading, isAdmin, signOut } = useAuth();
   const navigate = useNavigate();
   
-  // Persist API config in localStorage
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem("jbl_apiKey") || "");
-  const [apiEndpoint, setApiEndpoint] = useState(() => localStorage.getItem("jbl_apiEndpoint") || "https://api.openai.com/v1");
-  const [model, setModel] = useState(() => localStorage.getItem("jbl_model") || "gpt-4o");
-  const [stealthMode, setStealthMode] = useState(() => localStorage.getItem("jbl_stealthMode") === "true");
-  const [jailbreakPrompt, setJailbreakPrompt] = useState(() => localStorage.getItem("jbl_jailbreakPrompt") || DEFAULT_JAILBREAK);
+  // Persist API config in localStorage - use functions to avoid SSR issues
+  const [apiKey, setApiKey] = useState("");
+  const [apiEndpoint, setApiEndpoint] = useState("https://api.openai.com/v1");
+  const [model, setModel] = useState("gpt-4o");
+  const [stealthMode, setStealthMode] = useState(false);
+  const [jailbreakPrompt, setJailbreakPrompt] = useState(DEFAULT_JAILBREAK);
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [initialized, setInitialized] = useState(false);
 
-  // Persist settings to localStorage
+  // Load from localStorage on mount
   useEffect(() => {
-    localStorage.setItem("jbl_apiKey", apiKey);
-  }, [apiKey]);
+    const savedApiKey = localStorage.getItem("jbl_apiKey");
+    const savedEndpoint = localStorage.getItem("jbl_apiEndpoint");
+    const savedModel = localStorage.getItem("jbl_model");
+    const savedStealth = localStorage.getItem("jbl_stealthMode");
+    const savedPrompt = localStorage.getItem("jbl_jailbreakPrompt");
+
+    if (savedApiKey) setApiKey(savedApiKey);
+    if (savedEndpoint) setApiEndpoint(savedEndpoint);
+    if (savedModel) setModel(savedModel);
+    if (savedStealth) setStealthMode(savedStealth === "true");
+    if (savedPrompt) setJailbreakPrompt(savedPrompt);
+    
+    setInitialized(true);
+  }, []);
+
+  // Persist settings to localStorage only after initialization
+  useEffect(() => {
+    if (initialized) localStorage.setItem("jbl_apiKey", apiKey);
+  }, [apiKey, initialized]);
 
   useEffect(() => {
-    localStorage.setItem("jbl_apiEndpoint", apiEndpoint);
-  }, [apiEndpoint]);
+    if (initialized) localStorage.setItem("jbl_apiEndpoint", apiEndpoint);
+  }, [apiEndpoint, initialized]);
 
   useEffect(() => {
-    localStorage.setItem("jbl_model", model);
-  }, [model]);
+    if (initialized) localStorage.setItem("jbl_model", model);
+  }, [model, initialized]);
 
   useEffect(() => {
-    localStorage.setItem("jbl_stealthMode", String(stealthMode));
-  }, [stealthMode]);
+    if (initialized) localStorage.setItem("jbl_stealthMode", String(stealthMode));
+  }, [stealthMode, initialized]);
 
   useEffect(() => {
-    localStorage.setItem("jbl_jailbreakPrompt", jailbreakPrompt);
-  }, [jailbreakPrompt]);
+    if (initialized) localStorage.setItem("jbl_jailbreakPrompt", jailbreakPrompt);
+  }, [jailbreakPrompt, initialized]);
 
   // Conversation and endpoint hooks
   const {
