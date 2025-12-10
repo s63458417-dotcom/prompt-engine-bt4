@@ -94,9 +94,21 @@ const PROVIDERS = [
   },
   { 
     id: "ollama", 
-    name: "Ollama (Local)", 
+    name: "Ollama (Free Local)", 
     endpoint: "http://localhost:11434/v1",
-    models: ["llama3.1", "llama3", "mistral", "mixtral", "phi3", "qwen2"]
+    models: [
+      "llama3.2", "llama3.1", "llama3", "llama2",
+      "mistral", "mixtral", "codestral",
+      "phi3", "phi3.5", "phi4",
+      "qwen2.5", "qwen2", "qwen2.5-coder",
+      "gemma2", "gemma",
+      "deepseek-r1", "deepseek-coder-v2", "deepseek-v2.5",
+      "command-r", "command-r-plus",
+      "nemotron", "solar",
+      "wizardlm2", "vicuna",
+      "dolphin-mistral", "dolphin-mixtral"
+    ],
+    description: "Free & unlimited. Run AI locally on your machine."
   },
   { 
     id: "custom", 
@@ -411,17 +423,33 @@ export function ConfigSidebar({
                 </Select>
               </div>
 
+              {/* Ollama Setup Hint */}
+              {selectedProvider === "ollama" && (
+                <div className="p-3 bg-primary/10 border border-primary/20 rounded-lg space-y-2">
+                  <p className="text-xs font-medium text-primary">🆓 Free & Unlimited AI</p>
+                  <p className="text-xs text-muted-foreground">
+                    1. Install Ollama from <span className="text-primary">ollama.com</span>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    2. Run: <code className="bg-surface px-1 rounded">ollama pull llama3.2</code>
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    3. No API key needed - leave it as "ollama"
+                  </p>
+                </div>
+              )}
+
               {/* API Key */}
               <div className="space-y-2">
                 <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                  API Key
+                  {selectedProvider === "ollama" ? "API Key (optional)" : "API Key"}
                 </label>
                 <div className="relative">
                   <input
                     type={showApiKey ? "text" : "password"}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="Enter API Key..."
+                    placeholder={selectedProvider === "ollama" ? "ollama (or leave empty)" : "Enter API Key..."}
                     className="w-full bg-input border border-border rounded-md px-3 py-2 pr-10 text-sm font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
                   />
                   <button
@@ -532,8 +560,9 @@ export function ConfigSidebar({
                   value={jailbreakPrompt}
                   onChange={(e) => setJailbreakPrompt(e.target.value)}
                   placeholder="Enter jailbreak prompt..."
-                  className="w-full h-32 bg-input border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-none"
+                  className="w-full min-h-[200px] max-h-[500px] bg-input border border-border rounded-md px-3 py-2 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary resize-y"
                 />
+                <p className="text-xs text-muted-foreground">Supports large prompts. Drag to resize.</p>
               </div>
             </div>
           )}
