@@ -53,6 +53,7 @@ serve(async (req) => {
     const isAnthropic = apiEndpoint.includes("anthropic");
     const isGoogle = apiEndpoint.includes("generativelanguage.googleapis.com");
     const isCohere = apiEndpoint.includes("cohere");
+    const isHuggingFace = apiEndpoint.includes("huggingface.co/models/");
 
     let response: Response;
     let responseData: unknown;
@@ -225,6 +226,54 @@ serve(async (req) => {
       const cohereData = responseData as { text?: string };
       return new Response(
         JSON.stringify({ response: cohereData.text || "No response" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+
+    } else if (isHuggingFace) {
+      // Hugging Face Inference API format for Text Generation
+      // The apiEndpoint is expected to be the direct model URL (e.g., https://api-inference.huggingface.co/models/distilbert-base-uncased)
+      
+      const huggingFaceBody: Record<string, unknown> = {
+        inputs: userMessage, // For text generation, the user's message is the input
+      };
+
+      // Add a basic parameter for text generation, e.g., max_new_tokens
+      huggingFaceBody.parameters = {
+        max_new_tokens: 200, // Default to 200 tokens
+      };
+
+      response = await fetch(apiEndpoint, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(huggingFaceBody),
+      });
+
+      const responseText = await response.text();
+      console.log("Hugging Face response status:", response.status, "Body length:", responseText.length);
+
+      if (!responseText) {
+        throw new Error("Empty response from Hugging Face API");
+      }
+
+      try {
+        responseData = JSON.parse(responseText);
+      } catch {
+        console.error("Failed to parse Hugging Face response:", responseText.substring(0, 500));
+        throw new Error(`Invalid JSON response from Hugging Face API: ${responseText.substring(0, 200)}`);
+      }
+
+      if (!response.ok) {
+        const errorData = responseData as { error?: string, errors?: string[] };
+        throw new Error(errorData.error || errorData.errors?.join(", ") || `Hugging Face API error: ${response.status}`);
+      }
+      
+      // Assuming response is an array like [{ generated_text: "..." }]
+      const huggingFaceData = responseData as { generated_text?: string }[];
+      return new Response(
+        JSON.stringify({ response: huggingFaceData?.[0]?.generated_text || "No response" }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
 
