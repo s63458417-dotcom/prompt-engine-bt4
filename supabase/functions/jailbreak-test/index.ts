@@ -230,46 +230,43 @@ serve(async (req) => {
       );
 
     } else if (isHuggingFace) {
-      // Hugging Face Inference API format
-      // The apiEndpoint is expected to be the full model URL (e.g., https://api-inference.huggingface.co/models/deepset/roberta-base-squad2)
-      // For QA models like deepset/roberta-base-squad2, we need to format inputs properly
+      // Hugging Face Inference API format for text generation models
+      // The apiEndpoint is expected to be the full model URL (e.g., https://api-inference.huggingface.co/models/gpt2)
 
-      // For Hugging Face models, we'll format the input as a proper prompt
-      // Most Hugging Face models are instruction-following models that work with a system prompt and user input
-      // Create the prompt by combining jailbreak prompt and user message
+      // For Hugging Face text generation models, format as a single prompt
+      // Combine the jailbreak prompt and user message appropriately
+      let fullPrompt = "";
 
-      // For chat-style models, we need to format the conversation properly
-      let formattedPrompt = "";
-
-      // Format the conversation history and current message for instruction-tuned models
+      // Create a conversation-like prompt that works with instruction models
       if (conversationHistory.length > 0) {
-        // Build conversation history in an instruction format
-        let historyText = "";
+        // Build the conversation history
+        let historyPrompt = "";
         for (const msg of conversationHistory) {
           if (msg.role === "user") {
-            historyText += `### Instruction:\n${msg.content}\n\n`;
+            historyPrompt += `User: ${msg.content}\n`;
           } else if (msg.role === "assistant") {
-            historyText += `### Response:\n${msg.content}\n\n`;
+            historyPrompt += `Assistant: ${msg.content}\n`;
           }
         }
-
-        // Combine system prompt, conversation history, and current user message
-        formattedPrompt = `${effectivePrompt}\n\n${historyText}### Instruction:\n${userMessage}\n\n### Response:\n`;
+        fullPrompt = `${effectivePrompt}\n\n${historyPrompt}\nUser: ${userMessage}\nAssistant:`;
       } else {
-        // No history, just system prompt and current message
-        formattedPrompt = `${effectivePrompt}\n\n### Instruction:\n${userMessage}\n\n### Response:\n`;
+        // No conversation history
+        fullPrompt = `${effectivePrompt}\n\nUser: ${userMessage}\nAssistant:`;
       }
 
       const huggingFaceBody: Record<string, unknown> = {
-        inputs: formattedPrompt,
+        inputs: fullPrompt,
         parameters: {
           max_new_tokens: 200,
           top_k: 50,
           top_p: 0.95,
           temperature: 0.7,
           repetition_penalty: 1.0,
-          max_time: 10.0,
-          return_full_text: false,  // Don't return the prompt in the output
+          max_time: 30.0, // Increase time for potentially slower first loads
+        },
+        options: {
+          use_cache: false,
+          wait_for_model: true  // Wait for model to load if not loaded
         }
       };
 
