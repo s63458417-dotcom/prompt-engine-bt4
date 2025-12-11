@@ -53,7 +53,7 @@ serve(async (req) => {
     const isAnthropic = apiEndpoint.includes("anthropic");
     const isGoogle = apiEndpoint.includes("generativelanguage.googleapis.com");
     const isCohere = apiEndpoint.includes("cohere");
-    const isHuggingFace = apiEndpoint.includes("huggingface.co/models/");
+    const isHuggingFace = apiEndpoint.includes("huggingface.co/") || apiEndpoint.includes("hf.space");
 
     let response: Response;
     let responseData: unknown;
@@ -230,23 +230,74 @@ serve(async (req) => {
       );
 
     } else if (isHuggingFace) {
-      // Hugging Face Inference API format for Text Generation
+      // Hugging Face Inference API format
       // The apiEndpoint is expected to be the direct model URL (e.g., https://api-inference.huggingface.co/models/distilbert-base-uncased)
-      
-      const huggingFaceBody: Record<string, unknown> = {
-        inputs: userMessage, // For text generation, the user's message is the input
+
+      // Different models expect different input formats
+      // For text generation models like GPT-2, we use 'inputs'
+      // For question-answering models like RoBERTa, we use 'question' and 'context'
+      // For others, we may need different formats
+      const isQuestionAnsweringModel = model.includes('squad') || model.includes('qa') || model.includes('question-answering');
+
+      let huggingFaceBody: Record<string, unknown>;
+      if (isQuestionAnsweringModel) {
+        // For QA models, split the user message if it contains context and question
+        // Format: "Context: [context] Question: [question]" or just the question
+        const contextSeparator = userMessage.toLowerCase().includes("context:");
+        if (contextSeparator) {
+          const parts = userMessage.split(/question:\s*/i);
+          if (parts.length > 1) {
+            huggingFaceBody = {
+              inputs: {
+                question: parts[1].trim(),
+                context: parts[0].replace(/context:\s*/i, '').trim()
+              }
+            };
+          } else {
+            huggingFaceBody = {
+              inputs: {
+                question: userMessage,
+                context: effectivePrompt // Use the jailbreak prompt as context if no explicit context provided
+              }
+            };
+          }
+        } else {
+          // If no explicit context provided, use the effective prompt as context
+          huggingFaceBody = {
+            inputs: {
+              question: userMessage,
+              context: effectivePrompt
+            }
+          };
+        }
+      } else {
+        // For text generation models
+        huggingFaceBody = {
+          inputs: userMessage,
+        };
+      }
+
+      // Add parameters based on model type
+      huggingFaceBody.parameters = {
+        max_new_tokens: isQuestionAnsweringModel ? undefined : 200, // Not applicable for QA models
+        top_k: 50,
+        top_p: 0.95,
+        temperature: 0.7,
+        repetition_penalty: 1.0,
+        max_time: 10.0,
       };
 
-      // Add a basic parameter for text generation, e.g., max_new_tokens
-      huggingFaceBody.parameters = {
-        max_new_tokens: 200, // Default to 200 tokens
-      };
+      // Remove max_new_tokens for QA models since they don't accept this parameter
+      if (isQuestionAnsweringModel && 'max_new_tokens' in huggingFaceBody.parameters) {
+        delete huggingFaceBody.parameters.max_new_tokens;
+      }
 
       response = await fetch(apiEndpoint, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${apiKey}`,
           "Content-Type": "application/json",
+          "Accept": "application/json",
         },
         body: JSON.stringify(huggingFaceBody),
       });
@@ -266,14 +317,51 @@ serve(async (req) => {
       }
 
       if (!response.ok) {
-        const errorData = responseData as { error?: string, errors?: string[] };
+        const errorData = responseData as { error?: string, errors?: string[], estimated_time?: number };
+        if (response.status === 503) {
+          // Model might be loading, provide specific guidance
+          throw new Error(`Model is currently loading. Estimated time: ${errorData.estimated_time || 'unknown'} seconds. Try again later.`);
+        }
         throw new Error(errorData.error || errorData.errors?.join(", ") || `Hugging Face API error: ${response.status}`);
       }
-      
-      // Assuming response is an array like [{ generated_text: "..." }]
-      const huggingFaceData = responseData as { generated_text?: string }[];
+
+      // Handle different response formats depending on model type
+      let responseTextResult = "No response";
+
+      if (Array.isArray(responseData)) {
+        // For text generation models, response is typically an array like [{ generated_text: "..." }]
+        if ('generated_text' in responseData[0]) {
+          responseTextResult = (responseData[0] as { generated_text: string }).generated_text || "No response";
+        } else if ('answer' in responseData[0]) {
+          // For QA models, response might be like [{ answer: "... ", score: 0.x, ... }]
+          responseTextResult = (responseData[0] as { answer: string }).answer || "No answer provided";
+        } else if ('translation_text' in responseData[0]) {
+          // For translation models
+          responseTextResult = (responseData[0] as { translation_text: string }).translation_text || "No translation";
+        } else if ('label' in responseData[0]) {
+          // For classification models
+          responseTextResult = (responseData[0] as { label: string }).label || "No classification";
+        } else {
+          // Generic handling - return the whole response
+          responseTextResult = JSON.stringify(responseData[0]);
+        }
+      } else if (typeof responseData === 'object' && responseData !== null) {
+        // For some models that return objects directly
+        if ('answer' in responseData) {
+          responseTextResult = (responseData as { answer: string }).answer || "No answer provided";
+        } else if ('generated_text' in responseData) {
+          responseTextResult = (responseData as { generated_text: string }).generated_text || "No response";
+        } else {
+          // Generic object response
+          responseTextResult = JSON.stringify(responseData);
+        }
+      } else {
+        // Fallback to string representation
+        responseTextResult = String(responseData);
+      }
+
       return new Response(
-        JSON.stringify({ response: huggingFaceData?.[0]?.generated_text || "No response" }),
+        JSON.stringify({ response: responseTextResult }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
 
