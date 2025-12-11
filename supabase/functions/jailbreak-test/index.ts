@@ -54,6 +54,13 @@ serve(async (req) => {
     const isGoogle = apiEndpoint.includes("generativelanguage.googleapis.com");
     const isCohere = apiEndpoint.includes("cohere");
     const isHuggingFace = apiEndpoint.includes("huggingface.co/") || apiEndpoint.includes("hf.space");
+    // If it's a Hugging Face model endpoint, treat it as an OpenAI-compatible endpoint
+    // Since the old format is deprecated: https://api-inference.huggingface.co/models/model-name
+    // New format: https://router.huggingface.co/v1/chat/completions
+    const isHfOpenaiCompatible = isHuggingFace &&
+        (apiEndpoint === "https://router.huggingface.co" ||
+         apiEndpoint.includes("/v1") ||
+         apiEndpoint.includes("router.huggingface.co"));
 
     let response: Response;
     let responseData: unknown;
@@ -230,54 +237,54 @@ serve(async (req) => {
       );
 
     } else if (isHuggingFace) {
-      // Hugging Face Inference API format for text generation models
-      // The apiEndpoint is expected to be the full model URL (e.g., https://api-inference.huggingface.co/models/gpt2)
+      // Hugging Face has moved to OpenAI-compatible API format
+      // New endpoint: https://router.huggingface.co/v1/chat/completions
+      // But users might still use old format: https://api-inference.huggingface.co/models/model-name
+      // For backward compatibility, we'll adjust the endpoint and use OpenAI format
 
-      // For Hugging Face text generation models, format as a single prompt
-      // Combine the jailbreak prompt and user message appropriately
-      let fullPrompt = "";
+      let hfEndpoint = apiEndpoint;
+      let hfModel = model;
 
-      // Create a conversation-like prompt that works with instruction models
-      if (conversationHistory.length > 0) {
-        // Build the conversation history
-        let historyPrompt = "";
-        for (const msg of conversationHistory) {
-          if (msg.role === "user") {
-            historyPrompt += `User: ${msg.content}\n`;
-          } else if (msg.role === "assistant") {
-            historyPrompt += `Assistant: ${msg.content}\n`;
-          }
-        }
-        fullPrompt = `${effectivePrompt}\n\n${historyPrompt}\nUser: ${userMessage}\nAssistant:`;
-      } else {
-        // No conversation history
-        fullPrompt = `${effectivePrompt}\n\nUser: ${userMessage}\nAssistant:`;
+      // If using the old model-specific endpoint format, extract model name from URL
+      if (!isHfOpenaiCompatible && apiEndpoint.includes("api-inference.huggingface.co/models/")) {
+        // Extract model name from URL: https://api-inference.huggingface.co/models/model-name
+        const urlParts = apiEndpoint.split("/");
+        hfModel = urlParts[urlParts.length - 1] || model;  // Use last part as model name
+        hfEndpoint = "https://router.huggingface.co/v1/chat/completions";  // Use new OpenAI-compatible endpoint
+      } else if (apiEndpoint.includes("router.huggingface.co")) {
+        // If already using router, ensure it's the chat completion endpoint
+        hfEndpoint = "https://router.huggingface.co/v1/chat/completions";
       }
 
-      const huggingFaceBody: Record<string, unknown> = {
-        inputs: fullPrompt,
-        parameters: {
-          max_new_tokens: 200,
-          top_k: 50,
-          top_p: 0.95,
-          temperature: 0.7,
-          repetition_penalty: 1.0,
-          return_full_text: false,
-        },
-        options: {
-          use_cache: false,
-          wait_for_model: true  // Wait for model to load if not loaded
-        }
+      // Build messages array for OpenAI-compatible format
+      const messages = [
+        { role: "system", content: effectivePrompt },
+        ...conversationHistory.map((m) => ({
+          role: m.role,
+          content: m.content,
+        })),
+        { role: "user", content: userMessage },
+      ];
+
+      const requestBody: Record<string, unknown> = {
+        model: hfModel,
+        messages,
+        max_tokens: 4096,
+        temperature: 0.7,
       };
 
-      response = await fetch(apiEndpoint, {
+      // Build headers
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (apiKey) {
+        headers["Authorization"] = `Bearer ${apiKey}`;
+      }
+
+      response = await fetch(hfEndpoint, {
         method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "Accept": "application/json",
-        },
-        body: JSON.stringify(huggingFaceBody),
+        headers,
+        body: JSON.stringify(requestBody),
       });
 
       const responseText = await response.text();
@@ -295,57 +302,19 @@ serve(async (req) => {
       }
 
       if (!response.ok) {
-        const errorData = responseData as { error?: string, errors?: string[], estimated_time?: number };
+        const errorData = responseData as { error?: { message?: string }, error?: string, errors?: string[], estimated_time?: number };
         if (response.status === 503) {
           // Model might be loading, provide specific guidance
           throw new Error(`Model is currently loading. Estimated time: ${errorData.estimated_time || 'unknown'} seconds. Try again later.`);
         }
-        throw new Error(errorData.error || errorData.errors?.join(", ") || `Hugging Face API error: ${response.status}`);
+        // Handle error from OpenAI-compatible format
+        const errorMessage = errorData.error?.message || errorData.error || errorData.errors?.join(", ") || `Hugging Face API error: ${response.status}`;
+        throw new Error(errorMessage);
       }
 
-      // Handle different response formats depending on model type
-      let responseTextResult = "No response";
-
-      if (Array.isArray(responseData)) {
-        // For text generation models, response is typically an array like [{ generated_text: "..." }]
-        if ('generated_text' in responseData[0]) {
-          responseTextResult = (responseData[0] as { generated_text: string }).generated_text || "No response";
-        } else if ('answer' in responseData[0]) {
-          // For QA models, response might be like [{ answer: "... ", score: 0.x, ... }]
-          responseTextResult = (responseData[0] as { answer: string }).answer || "No answer provided";
-        } else if ('translation_text' in responseData[0]) {
-          // For translation models
-          responseTextResult = (responseData[0] as { translation_text: string }).translation_text || "No translation";
-        } else if ('label' in responseData[0]) {
-          // For classification models
-          responseTextResult = (responseData[0] as { label: string }).label || "No classification";
-        } else {
-          // Generic handling - return the first item
-          responseTextResult = JSON.stringify(responseData[0]);
-        }
-      } else if (typeof responseData === 'object' && responseData !== null) {
-        // For some models that return objects directly
-        if ('answer' in responseData) {
-          responseTextResult = (responseData as { answer: string }).answer || "No answer provided";
-        } else if ('generated_text' in responseData) {
-          responseTextResult = (responseData as { generated_text: string }).generated_text || "No response";
-        } else if (Array.isArray(responseData) && responseData.length > 0) {
-          // Handle case where response is an array at the top level
-          if ('answer' in responseData[0]) {
-            responseTextResult = (responseData[0] as { answer: string }).answer || "No answer provided";
-          } else if ('generated_text' in responseData[0]) {
-            responseTextResult = (responseData[0] as { generated_text: string }).generated_text || "No response";
-          } else {
-            responseTextResult = JSON.stringify(responseData[0]);
-          }
-        } else {
-          // Generic object response
-          responseTextResult = JSON.stringify(responseData);
-        }
-      } else {
-        // Fallback to string representation
-        responseTextResult = String(responseData);
-      }
+      // For OpenAI-compatible responses from Hugging Face, extract the content
+      const openaiData = responseData as { choices?: { message?: { content?: string } }[] };
+      const responseTextResult = openaiData.choices?.[0]?.message?.content || "No response";
 
       return new Response(
         JSON.stringify({ response: responseTextResult }),
