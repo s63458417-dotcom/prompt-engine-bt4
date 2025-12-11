@@ -252,8 +252,17 @@ serve(async (req) => {
         hfModel = urlParts[urlParts.length - 1] || model;  // Use last part as model name
         hfEndpoint = "https://router.huggingface.co/v1/chat/completions";  // Use new OpenAI-compatible endpoint
       } else if (apiEndpoint.includes("router.huggingface.co")) {
-        // If already using router, ensure it's the chat completion endpoint
-        hfEndpoint = "https://router.huggingface.co/v1/chat/completions";
+        // If already using router, make sure it's properly formatted
+        if (!apiEndpoint.includes("/v1/chat/completions")) {
+          // If user entered a partial router URL, complete it
+          if (apiEndpoint === "https://router.huggingface.co") {
+            hfEndpoint = "https://router.huggingface.co/v1/chat/completions";
+          } else if (apiEndpoint.endsWith("/v1") || apiEndpoint.includes("/v1/")) {
+            hfEndpoint = apiEndpoint.replace(/\/$/, "") + "/chat/completions";
+          } else {
+            hfEndpoint = "https://router.huggingface.co/v1/chat/completions";
+          }
+        }
       }
 
       // Build messages array for OpenAI-compatible format
