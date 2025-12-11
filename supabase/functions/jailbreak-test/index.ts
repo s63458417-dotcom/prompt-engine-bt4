@@ -262,7 +262,7 @@ serve(async (req) => {
           top_p: 0.95,
           temperature: 0.7,
           repetition_penalty: 1.0,
-          max_time: 30.0, // Increase time for potentially slower first loads
+          return_full_text: false,
         },
         options: {
           use_cache: false,
