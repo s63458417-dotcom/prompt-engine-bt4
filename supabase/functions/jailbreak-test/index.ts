@@ -231,20 +231,23 @@ serve(async (req) => {
 
     } else if (isHuggingFace) {
       // Hugging Face Inference API format
-      // The apiEndpoint is expected to be the direct model URL (e.g., https://api-inference.huggingface.co/models/distilbert-base-uncased)
+      // The apiEndpoint is expected to be the full model URL (e.g., https://api-inference.huggingface.co/models/deepset/roberta-base-squad2)
+      // For QA models like deepset/roberta-base-squad2, we need to format inputs properly
 
-      // Different models expect different input formats
-      // For text generation models like GPT-2, we use 'inputs'
-      // For question-answering models like RoBERTa, we use 'question' and 'context'
-      // For others, we may need different formats
-      const isQuestionAnsweringModel = model.includes('squad') || model.includes('qa') || model.includes('question-answering');
+      // Determine if this is a QA model based on the endpoint URL or model name
+      const isQuestionAnsweringModel = apiEndpoint.includes('squad') || apiEndpoint.includes('qa') || apiEndpoint.includes('question-answering') ||
+                                        model.includes('squad') || model.includes('qa') || model.includes('question-answering');
 
       let huggingFaceBody: Record<string, unknown>;
+
       if (isQuestionAnsweringModel) {
-        // For QA models, split the user message if it contains context and question
-        // Format: "Context: [context] Question: [question]" or just the question
+        // For QA models, we need both question and context
+        // Format: inputs: { question: "...", context: "..." }
+
+        // Try to extract context and question from the user message if formatted as "Context: ... Question: ..."
         const contextSeparator = userMessage.toLowerCase().includes("context:");
         if (contextSeparator) {
+          // User provided both context and question in the format "Context: ... Question: ..."
           const parts = userMessage.split(/question:\s*/i);
           if (parts.length > 1) {
             huggingFaceBody = {
@@ -254,42 +257,42 @@ serve(async (req) => {
               }
             };
           } else {
+            // Only context provided in the message, use effective prompt as question
             huggingFaceBody = {
               inputs: {
-                question: userMessage,
-                context: effectivePrompt // Use the jailbreak prompt as context if no explicit context provided
+                question: effectivePrompt,
+                context: userMessage
               }
             };
           }
         } else {
-          // If no explicit context provided, use the effective prompt as context
+          // No explicit context provided, so we need to provide context
+          // Use the effective prompt as context and user message as question, or vice versa depending on intended use
+          // Typically, effectivePrompt contains the jailbreak instructions, so it's better as context
           huggingFaceBody = {
             inputs: {
-              question: userMessage,
-              context: effectivePrompt
+              question: userMessage,  // The actual question from user
+              context: effectivePrompt || "Please answer the following question." // The context or instructions
             }
           };
         }
       } else {
-        // For text generation models
+        // For text generation models and other types
         huggingFaceBody = {
           inputs: userMessage,
         };
       }
 
-      // Add parameters based on model type
-      huggingFaceBody.parameters = {
-        max_new_tokens: isQuestionAnsweringModel ? undefined : 200, // Not applicable for QA models
-        top_k: 50,
-        top_p: 0.95,
-        temperature: 0.7,
-        repetition_penalty: 1.0,
-        max_time: 10.0,
-      };
-
-      // Remove max_new_tokens for QA models since they don't accept this parameter
-      if (isQuestionAnsweringModel && 'max_new_tokens' in huggingFaceBody.parameters) {
-        delete huggingFaceBody.parameters.max_new_tokens;
+      // Add parameters if needed (mostly for non-QA models)
+      if (!isQuestionAnsweringModel) {
+        huggingFaceBody.parameters = {
+          max_new_tokens: 200,
+          top_k: 50,
+          top_p: 0.95,
+          temperature: 0.7,
+          repetition_penalty: 1.0,
+          max_time: 10.0,
+        };
       }
 
       response = await fetch(apiEndpoint, {
@@ -342,7 +345,7 @@ serve(async (req) => {
           // For classification models
           responseTextResult = (responseData[0] as { label: string }).label || "No classification";
         } else {
-          // Generic handling - return the whole response
+          // Generic handling - return the first item
           responseTextResult = JSON.stringify(responseData[0]);
         }
       } else if (typeof responseData === 'object' && responseData !== null) {
@@ -351,6 +354,15 @@ serve(async (req) => {
           responseTextResult = (responseData as { answer: string }).answer || "No answer provided";
         } else if ('generated_text' in responseData) {
           responseTextResult = (responseData as { generated_text: string }).generated_text || "No response";
+        } else if (Array.isArray(responseData) && responseData.length > 0) {
+          // Handle case where response is an array at the top level
+          if ('answer' in responseData[0]) {
+            responseTextResult = (responseData[0] as { answer: string }).answer || "No answer provided";
+          } else if ('generated_text' in responseData[0]) {
+            responseTextResult = (responseData[0] as { generated_text: string }).generated_text || "No response";
+          } else {
+            responseTextResult = JSON.stringify(responseData[0]);
+          }
         } else {
           // Generic object response
           responseTextResult = JSON.stringify(responseData);
