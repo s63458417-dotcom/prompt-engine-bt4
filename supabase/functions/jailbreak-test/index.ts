@@ -234,66 +234,44 @@ serve(async (req) => {
       // The apiEndpoint is expected to be the full model URL (e.g., https://api-inference.huggingface.co/models/deepset/roberta-base-squad2)
       // For QA models like deepset/roberta-base-squad2, we need to format inputs properly
 
-      // Determine if this is a QA model based on the endpoint URL or model name
-      const isQuestionAnsweringModel = apiEndpoint.includes('squad') || apiEndpoint.includes('qa') || apiEndpoint.includes('question-answering') ||
-                                        model.includes('squad') || model.includes('qa') || model.includes('question-answering');
+      // For Hugging Face models, we'll format the input as a proper prompt
+      // Most Hugging Face models are instruction-following models that work with a system prompt and user input
+      // Create the prompt by combining jailbreak prompt and user message
 
-      let huggingFaceBody: Record<string, unknown>;
+      // For chat-style models, we need to format the conversation properly
+      let formattedPrompt = "";
 
-      if (isQuestionAnsweringModel) {
-        // For QA models, we need both question and context
-        // Format: inputs: { question: "...", context: "..." }
-
-        // Try to extract context and question from the user message if formatted as "Context: ... Question: ..."
-        const contextSeparator = userMessage.toLowerCase().includes("context:");
-        if (contextSeparator) {
-          // User provided both context and question in the format "Context: ... Question: ..."
-          const parts = userMessage.split(/question:\s*/i);
-          if (parts.length > 1) {
-            huggingFaceBody = {
-              inputs: {
-                question: parts[1].trim(),
-                context: parts[0].replace(/context:\s*/i, '').trim()
-              }
-            };
-          } else {
-            // Only context provided in the message, use effective prompt as question
-            huggingFaceBody = {
-              inputs: {
-                question: effectivePrompt,
-                context: userMessage
-              }
-            };
+      // Format the conversation history and current message for instruction-tuned models
+      if (conversationHistory.length > 0) {
+        // Build conversation history in an instruction format
+        let historyText = "";
+        for (const msg of conversationHistory) {
+          if (msg.role === "user") {
+            historyText += `### Instruction:\n${msg.content}\n\n`;
+          } else if (msg.role === "assistant") {
+            historyText += `### Response:\n${msg.content}\n\n`;
           }
-        } else {
-          // No explicit context provided, so we need to provide context
-          // Use the effective prompt as context and user message as question, or vice versa depending on intended use
-          // Typically, effectivePrompt contains the jailbreak instructions, so it's better as context
-          huggingFaceBody = {
-            inputs: {
-              question: userMessage,  // The actual question from user
-              context: effectivePrompt || "Please answer the following question." // The context or instructions
-            }
-          };
         }
+
+        // Combine system prompt, conversation history, and current user message
+        formattedPrompt = `${effectivePrompt}\n\n${historyText}### Instruction:\n${userMessage}\n\n### Response:\n`;
       } else {
-        // For text generation models and other types
-        huggingFaceBody = {
-          inputs: userMessage,
-        };
+        // No history, just system prompt and current message
+        formattedPrompt = `${effectivePrompt}\n\n### Instruction:\n${userMessage}\n\n### Response:\n`;
       }
 
-      // Add parameters if needed (mostly for non-QA models)
-      if (!isQuestionAnsweringModel) {
-        huggingFaceBody.parameters = {
+      const huggingFaceBody: Record<string, unknown> = {
+        inputs: formattedPrompt,
+        parameters: {
           max_new_tokens: 200,
           top_k: 50,
           top_p: 0.95,
           temperature: 0.7,
           repetition_penalty: 1.0,
           max_time: 10.0,
-        };
-      }
+          return_full_text: false,  // Don't return the prompt in the output
+        }
+      };
 
       response = await fetch(apiEndpoint, {
         method: "POST",
