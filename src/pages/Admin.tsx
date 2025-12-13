@@ -5,10 +5,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { 
-  Skull, ArrowLeft, Users, KeyRound, Plus, Copy, Check, 
+import {
+  Skull, ArrowLeft, Users, KeyRound, Plus, Copy, Check,
   Trash2, Loader2, UserPlus, Shield, Clock, Settings, Save,
-  Upload, Image as ImageIcon, Activity
+  Upload, Image as ImageIcon, Activity, RefreshCw
 } from "lucide-react";
 import { toast } from "sonner";
 import { AdminUserActivity } from "@/components/AdminUserActivity";
@@ -60,6 +60,11 @@ export default function Admin() {
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [creatingUser, setCreatingUser] = useState(false);
+
+  // Temporary credentials generator
+  const [tempUsername, setTempUsername] = useState("");
+  const [tempPassword, setTempPassword] = useState("");
+  const [showTempGenerator, setShowTempGenerator] = useState(false);
 
   // Expiry for codes
   const [expiryDays, setExpiryDays] = useState<number>(7);
@@ -356,7 +361,7 @@ export default function Admin() {
             .from("site_settings")
             .update({ setting_value: newValue, updated_at: new Date().toISOString() })
             .eq("setting_key", setting.setting_key);
-          
+
           if (error) throw error;
         }
       }
@@ -378,6 +383,30 @@ export default function Admin() {
       logo_url: "Logo",
     };
     return labels[key] || key;
+  };
+
+  // Generate temporary credentials
+  const generateTempCredentials = () => {
+    // Generate temporary username with timestamp
+    const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+    const randomPart = Math.random().toString(36).substring(2, 8); // Random string
+    const username = `temp_${timestamp}_${randomPart}`;
+
+    // Generate temporary password with mixed characters
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%&';
+    let password = '';
+    for (let i = 0; i < 12; i++) {
+      password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    setTempUsername(username);
+    setTempPassword(password);
+    toast.success("Temporary credentials generated!");
+  };
+
+  const copyToClipboard = (text: string, label: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success(`${label} copied to clipboard`);
   };
 
   if (authLoading || loading) {
@@ -699,6 +728,96 @@ export default function Admin() {
                 Create User
               </Button>
             </form>
+          )}
+        </section>
+
+        {/* Temporary Credentials Generator */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-primary" />
+              <h2 className="text-lg font-semibold text-foreground">Generate Temporary Credentials</h2>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowTempGenerator(!showTempGenerator);
+                if (!showTempGenerator) {
+                  generateTempCredentials(); // Auto-generate when opening
+                }
+              }}
+              className="gap-2"
+            >
+              <KeyRound className="w-4 h-4" />
+              {showTempGenerator ? "Hide Generator" : "Show Generator"}
+            </Button>
+          </div>
+
+          {showTempGenerator && (
+            <div className="bg-card border border-border rounded-xl p-6 space-y-6">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between p-4 bg-surface rounded-lg">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground mb-1">Temporary Username</p>
+                    <p className="font-mono text-sm truncate">{tempUsername || "Click generate to create credentials"}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(tempUsername, "Username")}
+                    disabled={!tempUsername}
+                    className="ml-2"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+
+                <div className="flex items-center justify-between p-4 bg-surface rounded-lg">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-muted-foreground mb-1">Temporary Password</p>
+                    <p className="font-mono text-sm truncate">{tempPassword || "Click generate to create credentials"}</p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => copyToClipboard(tempPassword, "Password")}
+                    disabled={!tempPassword}
+                    className="ml-2"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  onClick={generateTempCredentials}
+                  className="gap-2"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  Generate New
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setTempUsername("");
+                    setTempPassword("");
+                  }}
+                >
+                  Clear
+                </Button>
+              </div>
+
+              <div className="text-sm text-muted-foreground bg-surface/50 p-4 rounded-lg">
+                <p className="font-medium mb-1">How to use temporary credentials:</p>
+                <ul className="list-disc list-inside space-y-1">
+                  <li>Generate temporary username and password using this tool</li>
+                  <li>Use these credentials to create a new user account</li>
+                  <li>Share the credentials with the user for their initial login</li>
+                  <li>Advise the user to change their password after first login</li>
+                </ul>
+              </div>
+            </div>
           )}
         </section>
 
