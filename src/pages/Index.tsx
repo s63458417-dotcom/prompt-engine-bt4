@@ -333,38 +333,40 @@ const Index = () => {
   );
 
   return (
-    <div className="flex h-screen overflow-hidden">
+    <div className="flex flex-col h-screen overflow-hidden">
       {/* Desktop Sidebar */}
-      <div className="hidden md:block">
+      <div className="hidden md:block fixed top-0 left-0 h-full z-10">
         {sidebarContent}
       </div>
-
-      {/* Mobile Header & Sheet */}
-      <div className="md:hidden fixed top-0 left-0 right-0 z-50 bg-background border-b border-border px-4 py-3 flex items-center justify-between">
-        <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
-              <Menu className="w-5 h-5" />
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="p-0 w-80">
-            {sidebarContent}
-          </SheetContent>
-        </Sheet>
-        <span className="font-bold text-foreground">JailbreakLab</span>
-        <div className="w-10" /> {/* Spacer for centering */}
-      </div>
-
-      {/* Chat Area */}
-      <div className="flex-1 md:flex flex-col pt-14 md:pt-0">
-        <ChatArea
-          messages={messages}
-          isLoading={isLoading}
-          stealthMode={stealthMode}
-          onSendMessage={handleSendMessage}
-          apiEndpoint={apiEndpoint}
-          model={model}
-        />
+  
+      <div className="md:pl-80 flex-1 flex flex-col">
+        {/* Mobile Header & Sheet */}
+        <div className="md:hidden bg-background border-b border-border px-4 py-3 flex items-center justify-between">
+          <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <Menu className="w-5 h-5" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="p-0 w-80">
+              {sidebarContent}
+            </SheetContent>
+          </Sheet>
+          <span className="font-bold text-foreground">JailbreakLab</span>
+          <div className="w-10" /> {/* Spacer for centering */}
+        </div>
+  
+        {/* Chat Area */}
+        <div className="flex-1 flex flex-col overflow-y-auto">
+          <ChatArea
+            messages={messages}
+            isLoading={isLoading}
+            stealthMode={stealthMode}
+            onSendMessage={handleSendMessage}
+            apiEndpoint={apiEndpoint}
+            model={model}
+          />
+        </div>
       </div>
     </div>
   );

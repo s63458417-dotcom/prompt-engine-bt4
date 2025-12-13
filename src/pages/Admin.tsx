@@ -27,6 +27,7 @@ interface UserProfile {
   user_id: string;
   username: string;
   created_at: string;
+  email: string;
 }
 
 interface SiteSetting {
@@ -80,6 +81,20 @@ export default function Admin() {
     }
   }, [user, isAdmin, authLoading, navigate]);
 
+  const fetchUserEmail = async (userId: string): Promise<string> => {
+    try {
+      const { data: { user }, error } = await supabase.auth.admin.getUserById(userId);
+      if (error) {
+        console.error("Error fetching user email:", error);
+        return "N/A";
+      }
+      return user?.email || "N/A";
+    } catch (error) {
+      console.error("Error fetching user email:", error);
+      return "N/A";
+    }
+  };
+
   const fetchData = async () => {
     setLoading(true);
     try {
@@ -93,15 +108,23 @@ export default function Admin() {
         .select("*")
         .order("created_at", { ascending: false });
 
+      // Fetch email addresses for each profile
+      const usersWithDetails = await Promise.all(
+        (profiles || []).map(async (profile) => {
+          const email = await fetchUserEmail(profile.user_id);
+          return { ...profile, email };
+        })
+      );
+
       const { data: settings } = await supabase
         .from("site_settings")
         .select("*")
         .order("setting_key");
 
       setInviteCodes(codes || []);
-      setUsers(profiles || []);
+      setUsers(usersWithDetails || []);
       setSiteSettings(settings || []);
-      
+
       if (settings) {
         const initialSettings = settings.reduce((acc, s) => {
           acc[s.setting_key] = s.setting_value;
@@ -236,6 +259,41 @@ export default function Admin() {
     setCopiedCode(code);
     toast.success("Code copied to clipboard");
     setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const deleteUser = async (userId: string, username: string) => {
+    if (userId === user?.id) {
+      toast.error("You cannot delete your own account");
+      return;
+    }
+
+    const confirmed = window.confirm(`Are you sure you want to delete user "${username}"? This action cannot be undone.`);
+    if (!confirmed) return;
+
+    try {
+      const { error, data } = await supabase.functions.invoke("admin-delete-user", {
+        body: { userId }
+      });
+
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+
+      toast.success(data?.message || `User "${username}" has been deleted`);
+      fetchData(); // Refresh the user list
+    } catch (error) {
+      toast.error("Failed to delete user: " + (error instanceof Error ? error.message : "Unknown error"));
+      console.error("Error deleting user:", error);
+    }
+  };
+
+  const copyUserEmail = (email: string) => {
+    navigator.clipboard.writeText(email);
+    toast.success("Email copied to clipboard");
+  };
+
+  const copyUserEmail = (email: string) => {
+    navigator.clipboard.writeText(email);
+    toast.success("Email copied to clipboard");
   };
 
   const createUserDirectly = async (e: React.FormEvent) => {
@@ -657,12 +715,13 @@ export default function Admin() {
           </div>
 
           <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="grid grid-cols-3 gap-4 p-4 bg-surface/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border">
+            <div className="grid grid-cols-4 gap-4 p-4 bg-surface/50 text-xs font-semibold text-muted-foreground uppercase tracking-wider border-b border-border">
               <div>Username</div>
-              <div>User ID</div>
+              <div>Email</div>
               <div>Joined</div>
+              <div className="text-right">Actions</div>
             </div>
-            
+
             {users.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
                 No users yet.
@@ -670,13 +729,35 @@ export default function Admin() {
             ) : (
               <div className="divide-y divide-border">
                 {users.map((profile) => (
-                  <div key={profile.id} className="grid grid-cols-3 gap-4 p-4 items-center">
+                  <div key={profile.id} className="grid grid-cols-4 gap-4 p-4 items-center">
                     <div className="font-medium text-foreground">{profile.username}</div>
                     <div className="font-mono text-xs text-muted-foreground truncate">
-                      {profile.user_id}
+                      <div className="flex items-center justify-between">
+                        {profile.email}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => copyUserEmail(profile.email)}
+                          className="h-6 w-6 ml-2"
+                          title="Copy email"
+                        >
+                          <Copy className="w-3 h-3" />
+                        </Button>
+                      </div>
                     </div>
                     <div className="text-sm text-muted-foreground">
                       {new Date(profile.created_at).toLocaleDateString()}
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteUser(profile.user_id, profile.username)}
+                        className="h-8 text-destructive border-destructive hover:bg-destructive hover:text-destructive-foreground"
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" />
+                        Delete
+                      </Button>
                     </div>
                   </div>
                 ))}
