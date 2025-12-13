@@ -64,6 +64,24 @@ Deno.serve(async (req) => {
       );
     }
 
+    // Check if user is admin (only admins can change passwords)
+    const { data: roleData } = await supabaseUser
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .eq("role", "admin")
+      .maybeSingle();
+
+    const isAdmin = !!roleData;
+
+    // Non-admin users cannot change passwords
+    if (newPassword && !isAdmin) {
+      return new Response(
+        JSON.stringify({ error: "Password changes are only allowed for admins" }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // Validate username if provided
     if (newUsername !== undefined && newUsername !== null && newUsername !== "") {
       if (!isValidUsername(newUsername)) {
@@ -127,8 +145,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update password if provided
-    if (newPassword && newPassword.length >= 6) {
+    // Update password if provided and user is admin
+    if (newPassword && newPassword.length >= 6 && isAdmin) {
       const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(
         user.id,
         { password: newPassword }

@@ -8,11 +8,11 @@ import { ArrowLeft, User, Key, Loader2, Save, Check } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Settings() {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, isAdmin } = useAuth();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  
+
   const [currentUsername, setCurrentUsername] = useState("");
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -49,6 +49,12 @@ export default function Settings() {
   };
 
   const handleSave = async () => {
+    // For regular users, only allow username change (admins can change passwords)
+    if (!isAdmin && newPassword) {
+      toast.error("Password changes are only allowed for admins");
+      return;
+    }
+
     // Validate
     if (newPassword && newPassword.length < 6) {
       toast.error("Password must be at least 6 characters");
@@ -68,12 +74,12 @@ export default function Settings() {
     setSaving(true);
     try {
       const updates: { newUsername?: string; newPassword?: string } = {};
-      
+
       if (newUsername.trim() !== currentUsername) {
         updates.newUsername = newUsername.trim();
       }
-      
-      if (newPassword) {
+
+      if (newPassword && isAdmin) {
         updates.newPassword = newPassword;
       }
 
@@ -139,7 +145,7 @@ export default function Settings() {
             <User className="w-5 h-5" />
             <h2 className="font-semibold text-foreground">Username</h2>
           </div>
-          
+
           <div className="space-y-2">
             <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Current Username
@@ -163,42 +169,44 @@ export default function Settings() {
           </div>
         </section>
 
-        {/* Password Section */}
-        <section className="bg-card border border-border rounded-xl p-6 space-y-4">
-          <div className="flex items-center gap-2 text-primary">
-            <Key className="w-5 h-5" />
-            <h2 className="font-semibold text-foreground">Change Password</h2>
-          </div>
-          
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              New Password
-            </label>
-            <Input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              placeholder="Enter new password..."
-              className="bg-input border-border font-mono"
-            />
-            <p className="text-xs text-muted-foreground">
-              Leave blank to keep current password
-            </p>
-          </div>
+        {/* Password Section (only show to admin users) */}
+        {isAdmin && (
+          <section className="bg-card border border-border rounded-xl p-6 space-y-4">
+            <div className="flex items-center gap-2 text-primary">
+              <Key className="w-5 h-5" />
+              <h2 className="font-semibold text-foreground">Change Password</h2>
+            </div>
 
-          <div className="space-y-2">
-            <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-              Confirm Password
-            </label>
-            <Input
-              type="password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-              placeholder="Confirm new password..."
-              className="bg-input border-border font-mono"
-            />
-          </div>
-        </section>
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                New Password
+              </label>
+              <Input
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Enter new password..."
+                className="bg-input border-border font-mono"
+              />
+              <p className="text-xs text-muted-foreground">
+                Leave blank to keep current password
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Confirm Password
+              </label>
+              <Input
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                placeholder="Confirm new password..."
+                className="bg-input border-border font-mono"
+              />
+            </div>
+          </section>
+        )}
 
         {/* Save Button */}
         <Button
