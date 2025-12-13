@@ -271,17 +271,23 @@ export default function Admin() {
     if (!confirmed) return;
 
     try {
-      const { error, data } = await supabase.functions.invoke("admin-delete-user", {
-        body: { userId, username }
-      });
-
+      const { error } = await supabase.auth.admin.deleteUser(userId);
       if (error) throw error;
-      if (data?.error) throw new Error(data.error);
 
-      toast.success(data?.message || `User "${username}" has been deleted`);
+      // Also delete from profiles table
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("user_id", userId);
+
+      if (profileError) {
+        console.error("Error deleting profile:", profileError);
+      }
+
+      toast.success(`User "${username}" has been deleted`);
       fetchData(); // Refresh the user list
     } catch (error) {
-      toast.error("Failed to delete user: " + (error instanceof Error ? error.message : "Unknown error"));
+      toast.error("Failed to delete user");
       console.error("Error deleting user:", error);
     }
   };
