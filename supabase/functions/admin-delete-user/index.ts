@@ -86,12 +86,28 @@ Deno.serve(async (req) => {
       },
     });
 
-    // Delete the auth user, which will cascade to related tables like 'profiles'
-    const { error: deleteUserError } = await adminClient.auth.admin.deleteUser(userId);
+    // First delete from profiles table
+    const { error: profileError } = await adminClient
+      .from("profiles")
+      .delete()
+      .eq("user_id", userId);
+
+    if (profileError) {
+      console.error("Error deleting profile:", profileError);
+      return new Response(
+        JSON.stringify({ error: "Failed to delete user profile" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Then delete the auth user
+    const { error: authError: deleteUserError } = await adminClient.auth.admin.deleteUser(userId);
     if (deleteUserError) {
       console.error("Error deleting auth user:", deleteUserError);
+      // If profile was deleted but auth user wasn't, there's an inconsistency
+      // Return an error but the profile is already gone
       return new Response(
-        JSON.stringify({ error: "Failed to delete user account" }),
+        JSON.stringify({ error: "Failed to delete user account, but profile was removed" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
