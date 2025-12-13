@@ -86,12 +86,77 @@ Deno.serve(async (req) => {
       },
     });
 
-    // Delete the auth user, which will cascade to related tables like 'profiles'
+    // First, delete related records from other tables to avoid foreign key constraints
+    const { error: deleteMessagesError } = await adminClient
+      .from("chat_messages")
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteMessagesError) {
+      console.error("Error deleting chat messages:", deleteMessagesError);
+    }
+
+    const { error: deleteConversationsError } = await adminClient
+      .from("conversations")
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteConversationsError) {
+      console.error("Error deleting conversations:", deleteConversationsError);
+    }
+
+    const { error: deleteUsageLogsError } = await adminClient
+      .from("usage_logs")
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteUsageLogsError) {
+      console.error("Error deleting usage logs:", deleteUsageLogsError);
+    }
+
+    const { error: deleteUserEndpointsError } = await adminClient
+      .from("user_endpoints")
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteUserEndpointsError) {
+      console.error("Error deleting user endpoints:", deleteUserEndpointsError);
+    }
+
+    const { error: deleteUserTemplatesError } = await adminClient
+      .from("user_templates")
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteUserTemplatesError) {
+      console.error("Error deleting user templates:", deleteUserTemplatesError);
+    }
+
+    const { error: deleteUserRolesError } = await adminClient
+      .from("user_roles")
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteUserRolesError) {
+      console.error("Error deleting user roles:", deleteUserRolesError);
+    }
+
+    const { error: deleteProfilesError } = await adminClient
+      .from("profiles")
+      .delete()
+      .eq("user_id", userId);
+
+    if (deleteProfilesError) {
+      console.error("Error deleting profile:", deleteProfilesError);
+    }
+
+    // Now delete the auth user
     const { error: deleteUserError } = await adminClient.auth.admin.deleteUser(userId);
     if (deleteUserError) {
       console.error("Error deleting auth user:", deleteUserError);
+      // If the auth deletion fails, return an error
       return new Response(
-        JSON.stringify({ error: "Failed to delete user account" }),
+        JSON.stringify({ error: "Failed to delete user account from authentication system" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

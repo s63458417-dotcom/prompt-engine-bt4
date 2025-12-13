@@ -35,9 +35,13 @@ Deno.serve(async (req) => {
     }
 
     // Create Supabase client with user's token
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+    const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+
     const supabaseUser = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+      supabaseUrl,
+      supabaseAnonKey,
       {
         global: {
           headers: { Authorization: authHeader },
@@ -54,14 +58,38 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { newUsername, newPassword } = await req.json();
+    const { newUsername, newPassword, targetUserId } = await req.json();
 
-    // Validate at least one field is provided
-    if (!newUsername && !newPassword) {
-      return new Response(
-        JSON.stringify({ error: "At least one of newUsername or newPassword is required" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // Determine which user to update
+    let userIdToUpdate = user.id;
+    if (targetUserId) {
+      // Only admin can update other users
+      const { data: roleData } = await supabaseUser
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user.id)
+        .eq("role", "admin")
+        .maybeSingle();
+
+      if (roleData) {
+        userIdToUpdate = targetUserId;
+      } else {
+        return new Response(
+          JSON.stringify({ error: "Admin privileges required to update other users" }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
+    // If updating own credentials, verify that new credentials are provided
+    if (userIdToUpdate === user.id) {
+      // Validate at least one field is provided
+      if (!newUsername && !newPassword) {
+        return new Response(
+          JSON.stringify({ error: "At least one of newUsername or newPassword is required" }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
     }
 
     // Validate username if provided
@@ -86,8 +114,8 @@ Deno.serve(async (req) => {
 
     // Create admin client for updates
     const supabaseAdmin = createClient(
-      Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+      supabaseUrl,
+      supabaseServiceKey,
       {
         auth: {
           autoRefreshToken: false,
@@ -103,7 +131,7 @@ Deno.serve(async (req) => {
         .from("profiles")
         .select("user_id")
         .eq("username", newUsername.trim())
-        .neq("user_id", user.id)
+        .neq("user_id", userIdToUpdate)
         .maybeSingle();
 
       if (existingUser) {
@@ -116,7 +144,7 @@ Deno.serve(async (req) => {
       const { error: updateError } = await supabaseAdmin
         .from("profiles")
         .update({ username: newUsername.trim(), updated_at: new Date().toISOString() })
-        .eq("user_id", user.id);
+        .eq("user_id", userIdToUpdate);
 
       if (updateError) {
         console.error("Error updating username:", updateError);
@@ -130,7 +158,7 @@ Deno.serve(async (req) => {
     // Update password if provided
     if (newPassword && newPassword.length >= 6) {
       const { error: passwordError } = await supabaseAdmin.auth.admin.updateUserById(
-        user.id,
+        userIdToUpdate,
         { password: newPassword }
       );
 
@@ -144,7 +172,12 @@ Deno.serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, message: "Credentials updated successfully" }),
+      JSON.stringify({
+        success: true,
+        message: userIdToUpdate === user.id
+          ? "Credentials updated successfully"
+          : `Credentials updated successfully for user ${userIdToUpdate}`
+      }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (error) {
