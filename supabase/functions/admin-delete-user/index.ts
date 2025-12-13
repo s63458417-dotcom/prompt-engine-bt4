@@ -87,67 +87,86 @@ Deno.serve(async (req) => {
     });
 
     // First, delete related records from other tables to avoid foreign key constraints
-    const { error: deleteMessagesError } = await adminClient
+    // We'll track how many records were deleted for better reporting
+    const { error: deleteMessagesError, count: messagesCount } = await adminClient
       .from("chat_messages")
       .delete()
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select(); // Use select to get count
 
     if (deleteMessagesError) {
       console.error("Error deleting chat messages:", deleteMessagesError);
     }
 
-    const { error: deleteConversationsError } = await adminClient
+    const { error: deleteConversationsError, count: conversationsCount } = await adminClient
       .from("conversations")
       .delete()
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select();
 
     if (deleteConversationsError) {
       console.error("Error deleting conversations:", deleteConversationsError);
     }
 
-    const { error: deleteUsageLogsError } = await adminClient
+    const { error: deleteUsageLogsError, count: usageLogsCount } = await adminClient
       .from("usage_logs")
       .delete()
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select();
 
     if (deleteUsageLogsError) {
       console.error("Error deleting usage logs:", deleteUsageLogsError);
     }
 
-    const { error: deleteUserEndpointsError } = await adminClient
+    const { error: deleteUserEndpointsError, count: endpointsCount } = await adminClient
       .from("user_endpoints")
       .delete()
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select();
 
     if (deleteUserEndpointsError) {
       console.error("Error deleting user endpoints:", deleteUserEndpointsError);
     }
 
-    const { error: deleteUserTemplatesError } = await adminClient
+    const { error: deleteUserTemplatesError, count: templatesCount } = await adminClient
       .from("user_templates")
       .delete()
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select();
 
     if (deleteUserTemplatesError) {
       console.error("Error deleting user templates:", deleteUserTemplatesError);
     }
 
-    const { error: deleteUserRolesError } = await adminClient
+    const { error: deleteUserRolesError, count: rolesCount } = await adminClient
       .from("user_roles")
       .delete()
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select();
 
     if (deleteUserRolesError) {
       console.error("Error deleting user roles:", deleteUserRolesError);
     }
 
-    const { error: deleteProfilesError } = await adminClient
+    const { error: deleteProfilesError, count: profilesCount } = await adminClient
       .from("profiles")
       .delete()
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      .select();
 
     if (deleteProfilesError) {
       console.error("Error deleting profile:", deleteProfilesError);
+    }
+
+    // Also delete any temp auth tokens associated with this user (will be auto-cascaded in foreign key but good to be explicit)
+    const { error: deleteTempTokensError, count: tempTokensCount } = await adminClient
+      .from("temp_auth_tokens")
+      .delete()
+      .eq("user_id", userId)
+      .select();
+
+    if (deleteTempTokensError) {
+      console.error("Error deleting temp auth tokens:", deleteTempTokensError);
     }
 
     // Now delete the auth user
@@ -164,7 +183,17 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: `User "${username || userId}" has been deleted`
+        message: `User "${username || userId}" has been deleted`,
+        deleted_counts: {
+          chat_messages: messagesCount || 0,
+          conversations: conversationsCount || 0,
+          usage_logs: usageLogsCount || 0,
+          user_endpoints: endpointsCount || 0,
+          user_templates: templatesCount || 0,
+          user_roles: rolesCount || 0,
+          profiles: profilesCount || 0,
+          temp_auth_tokens: tempTokensCount || 0
+        }
       }),
       {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
