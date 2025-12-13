@@ -333,14 +333,17 @@ const Index = () => {
   );
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden">
+    <div className="flex h-screen bg-background">
       {/* Desktop Sidebar */}
-      <div className="hidden md:block fixed top-0 left-0 h-full z-10">
-        {sidebarContent}
+      <div className="hidden md:block">
+        <div className="h-full">
+          {sidebarContent}
+        </div>
       </div>
-  
-      <div className="md:pl-80 flex-1 flex flex-col">
-        {/* Mobile Header & Sheet */}
+
+      {/* Mobile and Main Content */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Mobile Header */}
         <div className="md:hidden bg-background border-b border-border px-4 py-3 flex items-center justify-between">
           <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
             <SheetTrigger asChild>
@@ -355,9 +358,9 @@ const Index = () => {
           <span className="font-bold text-foreground">JailbreakLab</span>
           <div className="w-10" /> {/* Spacer for centering */}
         </div>
-  
+
         {/* Chat Area */}
-        <div className="flex-1 flex flex-col overflow-y-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <ChatArea
             messages={messages}
             isLoading={isLoading}
