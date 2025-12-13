@@ -1,4 +1,10 @@
-import { User, Bot, AlertCircle } from "lucide-react";
+import { User, Bot, AlertCircle, Copy, Check } from "lucide-react";
+import { useState } from "react";
+import ReactMarkdown from "react-markdown";
+import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
+import { vscDarkPlus } from "react-syntax-highlighter/dist/esm/styles/prism";
+import rehypeRaw from "rehype-raw";
+import remarkGfm from "remark-gfm";
 
 export interface Message {
   id: string;
@@ -10,6 +16,49 @@ export interface Message {
 interface ChatMessageProps {
   message: Message;
 }
+
+const CodeBlock = ({ node, inline, className, children, ...props }: any) => {
+  const [copied, setCopied] = useState(false);
+  const match = /language-(\w+)/.exec(className || "");
+  const lang = match && match[1] ? match[1] : "";
+  const code = String(children).replace(/\n$/, "");
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return !inline ? (
+    <div className="relative bg-zinc-800 rounded-lg my-4">
+      <div className="flex items-center justify-between px-4 py-2 bg-zinc-700 rounded-t-lg">
+        <span className="text-xs text-gray-300">{lang}</span>
+        <button
+          onClick={handleCopy}
+          className="text-xs text-gray-300 hover:text-white"
+        >
+          {copied ? (
+            <Check className="w-4 h-4 text-green-500" />
+          ) : (
+            <Copy className="w-4 h-4" />
+          )}
+        </button>
+      </div>
+      <SyntaxHighlighter
+        style={vscDarkPlus}
+        language={lang}
+        PreTag="div"
+        {...props}
+      >
+        {code}
+      </SyntaxHighlighter>
+    </div>
+  ) : (
+    <code className="text-sm bg-zinc-700 text-white px-1 rounded" {...props}>
+      {children}
+    </code>
+  );
+};
 
 export function ChatMessage({ message }: ChatMessageProps) {
   const isUser = message.role === "user";
@@ -43,13 +92,18 @@ export function ChatMessage({ message }: ChatMessageProps) {
             {message.timestamp.toLocaleTimeString()}
           </span>
         </div>
-        <div 
+        <ReactMarkdown
           className={`text-sm leading-relaxed whitespace-pre-wrap break-words font-mono ${
             isError ? "text-red-400" : "text-foreground/90"
           }`}
+          rehypePlugins={[rehypeRaw]}
+          remarkPlugins={[remarkGfm]}
+          components={{
+            code: CodeBlock,
+          }}
         >
           {message.content}
-        </div>
+        </ReactMarkdown>
       </div>
     </div>
   );
