@@ -291,11 +291,6 @@ export default function Admin() {
     toast.success("Email copied to clipboard");
   };
 
-  const copyUserEmail = (email: string) => {
-    navigator.clipboard.writeText(email);
-    toast.success("Email copied to clipboard");
-  };
-
   const createUserDirectly = async (e: React.FormEvent) => {
     e.preventDefault();
     
