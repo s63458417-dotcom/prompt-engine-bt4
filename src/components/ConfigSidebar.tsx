@@ -295,9 +295,9 @@ export function ConfigSidebar({
   };
 
   return (
-    <aside className="w-80 bg-sidebar border-r border-sidebar-border flex flex-col h-full max-h-screen md:max-h-full overflow-hidden">
+    <aside className="w-80 bg-card border-r border-border flex flex-col h-full max-h-screen md:max-h-full overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-sidebar-border">
+      <div className="p-4 border-b border-border">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center glow-crimson-subtle overflow-hidden">
@@ -618,7 +618,7 @@ export function ConfigSidebar({
       </div>
 
       {/* Footer */}
-      <div className="p-4 border-t border-sidebar-border space-y-2">
+      <div className="p-4 border-t border-border space-y-2">
         <Button
           variant="outline"
           className="w-full gap-2"
